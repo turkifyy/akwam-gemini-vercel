@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#090c0a">
+<meta name="description" content="عرض أكوام داخل إطار آمن مع ترجمة Gemini عبر Cloudflare Worker.">
+<title>أكوام | ترجمة Gemini</title>
+<link rel="stylesheet" href="/style.css">
+<script src="/config.js"></script>
+</head>
+<body>
+<main class="app">
+  <section class="setup" id="setup" hidden>
+    <div class="setup-card">
+      <div class="setup-icon" aria-hidden="true">✦</div>
+      <h1>أكمل إعداد الخادم أولًا</h1>
+      <p id="setup-message">أضف رابط Cloudflare Worker إلى ملف <code>config.js</code> وانشر الحزمة على Vercel.</p>
+      <ol>
+        <li>أنشئ مفتاح Gemini في Google AI Studio.</li>
+        <li>أضف <code>GEMINI_API_KEY</code> كسرّ في إعدادات Cloudflare Worker.</li>
+        <li>أعد تحميل الصفحة، وسيختار التطبيق اللغة تلقائيًا.</li>
+      </ol>
+    </div>
+  </section>
+
+  <div class="frame-stage" id="frame-stage" hidden>
+    <nav class="category-nav" aria-label="تصنيفات المسلسلات">
+      <button class="category-tab is-active" type="button" data-category="turkish" aria-pressed="true">
+        <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.6 3.2a8.9 8.9 0 1 0 6.1 13.4 8 8 0 0 1-6.1-13.4Z" fill="currentColor" stroke="none"/><path d="m17.8 6.2.8 1.7 1.9.2-1.4 1.3.4 1.9-1.7-1-1.7 1 .4-1.9-1.4-1.3 1.9-.2.8-1.7Z" fill="currentColor" stroke="none"/></svg>
+        <span>تركي</span>
+      </button>
+      <button class="category-tab" type="button" data-category="indian" aria-pressed="false">
+        <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h16v11H4zM4 8.5l2.2-4h16l-2.2 4M8 4.5l2 4m3-4 2 4m3-4 2 4M8 12v4m4-4v4m4-4v4"/></svg>
+        <span>هندي</span>
+      </button>
+      <button class="category-tab" type="button" data-category="korean" aria-pressed="false">
+        <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a4.5 4.5 0 0 1 0 9 4.5 4.5 0 0 0 0 9"/><circle cx="12" cy="7.5" r=".8" fill="currentColor" stroke="none"/><circle cx="12" cy="16.5" r=".8" fill="currentColor" stroke="none"/></svg>
+        <span>كوري</span>
+      </button>
+      <button class="category-tab" type="button" data-category="foreign" aria-pressed="false">
+        <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18M5.6 6.5h12.8M5.6 17.5h12.8"/></svg>
+        <span>أجنبي</span>
+      </button>
+    </nav>
+    <iframe
+      id="site-frame"
+      title="منصة أكوام مترجمة بواسطة Gemini"
+      sandbox="allow-scripts allow-same-origin allow-forms"
+      referrerpolicy="strict-origin-when-cross-origin"
+      allow="fullscreen"
+      allowfullscreen></iframe>
+  </div>
+
+  <noscript><p class="noscript">يلزم تفعيل JavaScript لتشغيل الترجمة داخل الإطار.</p></noscript>
+</main>
+<script>
+(() => {
+  'use strict';
+  const workerInput = String(window.AKWAM_WORKER_URL || '').trim();
+  const setup = document.querySelector('#setup');
+  const frameStage = document.querySelector('#frame-stage');
+  const frame = document.querySelector('#site-frame');
+  const root = document.documentElement;
+  const params = new URLSearchParams('section=32&category=0&rating=0&year=0&language=0&formats=0&quality=0&page=1');
+  const categoryFilters = {
+    turkish: {section:'32'},
+    indian: {section:'31'},
+    korean: {section:'33',language:'12'},
+    foreign: {section:'30'}
+  };
+  let currentCategory = 'turkish';
+  let workerOrigin = '';
+  let currentLang = 'en';
+  let skipHeight = 524;
+  let translationRetryCount = 0;
+  let translationRetryTimer = 0;
+  let languageRevision = 0;
+  const countryLanguages = {};
+  const supportedLanguages = new Set(['ar','en','tr','fr','de','es','it','pt','ru','fa','ur','hi','id','ja','ko','zh-CN']);
+  const navigationLabels = {
+    ar:{nav:'تصنيفات المسلسلات',turkish:'تركي',indian:'هندي',korean:'كوري',foreign:'أجنبي'},
+    en:{nav:'Series categories',turkish:'Turkish',indian:'Indian',korean:'Korean',foreign:'Foreign'},
+    tr:{nav:'Dizi kategorileri',turkish:'Türk',indian:'Hint',korean:'Kore',foreign:'Yabancı'},
+    fr:{nav:'Catégories de séries',turkish:'Turques',indian:'Indiennes',korean:'Coréennes',foreign:'Étranger'},
+    de:{nav:'Serienkategorien',turkish:'Türkisch',indian:'Indisch',korean:'Koreanisch',foreign:'Ausland'},
+    es:{nav:'Categorías de series',turkish:'Turcas',indian:'Indias',korean:'Coreanas',foreign:'Exterior'},
+    it:{nav:'Categorie serie',turkish:'Turche',indian:'Indiane',korean:'Coreane',foreign:'Estere'},
+    pt:{nav:'Categorias de séries',turkish:'Turcas',indian:'Indianas',korean:'Coreanas',foreign:'Exterior'},
+    ru:{nav:'Категории сериалов',turkish:'Турецкие',indian:'Индийские',korean:'Корейские',foreign:'Мировые'},
+    fa:{nav:'دسته‌بندی سریال‌ها',turkish:'ترکی',indian:'هندی',korean:'کره‌ای',foreign:'خارجی'},
+    ur:{nav:'ڈراما سیریز کی اقسام',turkish:'ترک',indian:'بھارتی',korean:'کوریائی',foreign:'غیرملکی'},
+    hi:{nav:'सीरीज़ श्रेणियाँ',turkish:'तुर्की',indian:'भारतीय',korean:'कोरियाई',foreign:'विदेशी'},
+    id:{nav:'Kategori serial',turkish:'Turki',indian:'India',korean:'Korea',foreign:'Asing'},
+    ja:{nav:'ドラマのカテゴリ',turkish:'トルコ',indian:'インド',korean:'韓国',foreign:'海外'},
+    ko:{nav:'드라마 카테고리',turkish:'튀르키예',indian:'인도',korean:'한국',foreign:'해외'},
+    'zh-CN':{nav:'剧集分类',turkish:'土耳其',indian:'印度',korean:'韩国',foreign:'海外'}
+  };
+
+  function addCountries(language, countryCodes) {
+    for (const country of countryCodes.split(' ')) {
+      (countryLanguages[country] ||= []).push(language);
+    }
+  }
+
+  addCountries('ar','AE SA EG MA DZ TN IQ JO LB PS QA KW BH OM YE SY LY SD MR DJ SO');
+  addCountries('en','US GB IE AU NZ ZA NG GH KE UG TZ ZW BW NA RW ET GM SL LR MW ZM');
+  addCountries('fr','FR MC SN CI BJ BF NE TG GA GN CD CG CF TD MG');
+  addCountries('de','DE AT LI');
+  addCountries('es','ES MX AR CL CO PE VE EC BO PY UY CR PA GT HN SV NI DO CU PR GQ');
+  addCountries('pt','PT BR AO MZ');
+  addCountries('it','IT SM VA');
+  addCountries('tr','TR');
+  addCountries('ru','RU BY KZ KG UZ AM AZ GE MD UA');
+  addCountries('fa','IR AF');
+  addCountries('ur','PK');
+  addCountries('hi','IN NP');
+  addCountries('id','ID MY');
+  addCountries('ja','JP');
+  addCountries('ko','KR');
+  addCountries('zh-CN','CN TW HK MO');
+  Object.assign(countryLanguages, {
+    CA:['en','fr'], BE:['fr','de','en'], CH:['de','fr','it'], LU:['fr','de','en'],
+    SG:['en','zh-CN'], IN:['hi','en'], PK:['ur','en'], AF:['fa','ur'], MY:['id','en'],
+    PH:['en','id'], MR:['ar','fr'], DJ:['ar','fr'], CM:['fr','en'], HK:['zh-CN','en']
+  });
+
+  function languageCode(locale) {
+    const normalized = String(locale || '').replaceAll('_','-').toLowerCase();
+    if (normalized.startsWith('zh')) return 'zh-CN';
+    const code = normalized.split('-')[0];
+    return supportedLanguages.has(code) ? code : '';
+  }
+
+  async function detectVisitorLanguage() {
+    const browserLanguages = [...new Set([...(navigator.languages || []),navigator.language].map(languageCode).filter(Boolean))];
+    let location = {country:''};
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(workerOrigin + '/api/visitor', {mode:'cors',cache:'no-store',signal:controller.signal});
+      if (response.ok) location = await response.json();
+    } catch (_) {
+      // Fall back to the browser's supported language preferences.
+    } finally {
+      clearTimeout(timeout);
+    }
+    const country = /^[A-Z]{2}$/.test(String(location.country || '').toUpperCase())
+      ? String(location.country).toUpperCase()
+      : '';
+    const localLanguages = countryLanguages[country] || [];
+    const detectedLanguage = browserLanguages.find(language => localLanguages.includes(language))
+      || localLanguages[0]
+      || browserLanguages[0]
+      || 'en';
+    return {country,language:detectedLanguage};
+  }
+
+  function localizeNavigation(language) {
+    const labels = navigationLabels[language] || navigationLabels.en;
+    root.lang = language;
+    root.dir = ['ar','fa','ur'].includes(language) ? 'rtl' : 'ltr';
+    const nav = document.querySelector('.category-nav');
+    nav.setAttribute('aria-label', labels.nav);
+    nav.querySelectorAll('.category-tab').forEach(button => {
+      const label = labels[button.dataset.category] || navigationLabels.en[button.dataset.category];
+      button.querySelector('span').textContent = label;
+      button.title = label;
+    });
+  }
+
+  function showSetup(message) {
+    setup.hidden = false;
+    frameStage.hidden = true;
+    document.querySelector('#setup-message').textContent = message;
+  }
+
+  function frameUrl(lang) {
+    const target = new URL(workerOrigin + '/site/' + encodeURIComponent(lang) + '/series');
+    for (const [key,value] of params) target.searchParams.set(key, value);
+    for (const [key,value] of Object.entries(categoryFilters[currentCategory])) target.searchParams.set(key, value);
+    target.searchParams.set('__parent', location.origin);
+    return target.href;
+  }
+
+  function openLanguage(lang, retry=false) {
+    if (translationRetryTimer) clearTimeout(translationRetryTimer);
+    translationRetryTimer = 0;
+    if (!retry) {
+      translationRetryCount = 0;
+      languageRevision += 1;
+    }
+    currentLang = lang;
+    root.style.setProperty('--skip-height', skipHeight + 'px');
+    frame.src = frameUrl(lang);
+  }
+
+  document.querySelectorAll('.category-tab').forEach(button => {
+    button.addEventListener('click', () => {
+      const category = button.dataset.category;
+      if (!categoryFilters[category] || category === currentCategory) return;
+      currentCategory = category;
+      document.querySelectorAll('.category-tab').forEach(tab => {
+        const active = tab === button;
+        tab.classList.toggle('is-active', active);
+        tab.setAttribute('aria-pressed', String(active));
+      });
+      openLanguage(currentLang);
+    });
+  });
+
+  async function start() {
+    if (!workerInput || workerInput.includes('YOUR_ACCOUNT')) {
+      showSetup('عدّل قيمة AKWAM_WORKER_URL في site/config.js إلى عنوان Cloudflare Worker المنشور، ثم أعد نشر الموقع على Vercel.');
+      return;
+    }
+    try {
+      workerOrigin = new URL(workerInput).origin;
+      const [response, visitor] = await Promise.all([
+        fetch(workerOrigin + '/health', {mode:'cors',cache:'no-store'}),
+        detectVisitorLanguage()
+      ]);
+      const health = await response.json();
+      if (!response.ok || !health.ok) throw new Error('تعذّر الوصول إلى Worker أو أن نطاق Vercel غير مسموح.');
+      if (!health.geminiConfigured) throw new Error('أضف GEMINI_API_KEY كسرّ في إعدادات Cloudflare Worker.');
+      currentLang = visitor.language;
+      localizeNavigation(currentLang);
+      frameStage.hidden = false;
+      openLanguage(currentLang);
+    } catch (error) {
+      showSetup(error.message || 'تعذّر الاتصال بالخادم.');
+    }
+  }
+
+  window.addEventListener('message', event => {
+    if (!workerOrigin || event.origin !== workerOrigin || event.source !== frame.contentWindow) return;
+    const data = event.data;
+    if (data?.source !== 'akwam-gemini-bridge') return;
+    if (data.type === 'frame-state' && ['archive','detail'].includes(data.kind)) {
+      const height = Number(data.skipHeight);
+      if (Number.isFinite(height) && height >= 0 && height <= 600) {
+        skipHeight = Math.ceil(height);
+        root.style.setProperty('--skip-height', skipHeight + 'px');
+      }
+    }
+    if (data.type === 'translation-error') {
+      if (data.retryable !== true) {
+        console.error('Gemini translation failed:', data.message || 'Unknown error');
+        return;
+      }
+      if (translationRetryCount < 3) {
+        const delay = 1500 * 2 ** translationRetryCount;
+        translationRetryCount += 1;
+        const revision = languageRevision;
+        translationRetryTimer = setTimeout(() => {
+          translationRetryTimer = 0;
+          if (revision === languageRevision) openLanguage(currentLang, true);
+        }, delay);
+      } else {
+        console.error('Gemini translation failed:', data.message || 'Unknown error');
+      }
+    }
+  });
+
+  frame.addEventListener('load', () => {
+    if (!workerOrigin || !frame.contentWindow) return;
+    frame.contentWindow.postMessage({source:'akwam-gemini-bridge',type:'frame-state-request'},workerOrigin);
+  });
+  start();
+})();
+</script>
+</body>
+</html>
