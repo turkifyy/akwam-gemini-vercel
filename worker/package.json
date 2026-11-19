@@ -1,0 +1,15 @@
+{
+  "name": "akwam-gemini-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "bundle": "node build-bundle.mjs",
+    "deploy": "wrangler deploy",
+    "check": "node --check src/index.js && node --check src/translator.js && node --check src/bootstrap.js && node --check build-bundle.mjs && node --check bundle.js",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "wrangler": "^4.36.0"
+  }
+}
