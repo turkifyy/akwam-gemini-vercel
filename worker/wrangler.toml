@@ -1,0 +1,16 @@
+name = "akwam-gemini-bridge"
+main = "src/index.js"
+compatibility_date = "2026-11-17"
+
+[vars]
+UPSTREAM_HOST = "akwam.ss"
+GEMINI_MODEL = "gemini-3.5-flash-lite"
+ALLOWED_PARENT_ORIGINS = "https://akwam-gemini-vercel.vercel.app"
+
+[[ratelimits]]
+name = "TRANSLATION_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 60
+  period = 60
