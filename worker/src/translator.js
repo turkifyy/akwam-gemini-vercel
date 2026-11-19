@@ -262,7 +262,7 @@ export const translatorScript = String.raw`(() => {
         if (moving || (requireBottom && scroller.scrollHeight - viewportHeight - scroller.scrollTop > 180)) return;
         moving = true;
         location.replace(next.href);
-      }, 15000);
+      }, 7000);
     }
 
     if (advanceAfterManual) scheduleAdvance(null, 0, false);
