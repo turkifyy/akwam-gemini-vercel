@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://akwam-gemini-vercel.vercel.app/sitemap.xml

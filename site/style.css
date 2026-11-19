@@ -7,19 +7,44 @@
   --muted: #a6b0a2;
   --text: #f2f4ee;
   --accent: #d5f287;
+  --nav-bg: #11150ff0;
+  --nav-border: #ffffff18;
+  --nav-shadow: #0003;
+  --nav-hover: #ffffff0a;
+  --nav-active: #d5f28712;
   --skip-height: 524px;
-  --nav-height: 84px;
+  --brand-height: 48px;
+  --nav-height: 132px;
+}
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f6f2;
+  --panel: #ffffff;
+  --line: #dfe5d9;
+  --muted: #5f6958;
+  --text: #20281b;
+  --accent: #557a1e;
+  --nav-bg: #fbfcf9f2;
+  --nav-border: #26351d1c;
+  --nav-shadow: #26351d20;
+  --nav-hover: #293b1b0b;
+  --nav-active: #557a1e18;
 }
 * { box-sizing: border-box; }
 html, body, .app { position: fixed; inset: 0; width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
 .frame-stage { position: fixed; z-index: 1; inset: 0; overflow: hidden; background: var(--bg); isolation: isolate; }
 .frame-stage[hidden], .setup[hidden] { display: none; }
-#site-frame { position: absolute; z-index: 1; top: calc(var(--nav-height) - var(--skip-height)); left: 0; display: block; width: 100%; height: calc(100svh + var(--skip-height) - var(--nav-height)); margin: 0; padding: 0; border: 0; background: #111; }
-.category-nav { position: absolute; z-index: 2; inset: 0 0 auto; display: flex; min-height: var(--nav-height); align-items: center; justify-content: center; gap: clamp(8px, 1.8vw, 24px); padding: 5px clamp(12px, 3vw, 32px); border-bottom: 1px solid #ffffff18; background: #11150ff0; box-shadow: 0 8px 24px #0003; backdrop-filter: blur(16px); }
+#site-frame { position: absolute; z-index: 1; top: calc(var(--nav-height) - var(--skip-height)); left: 0; display: block; width: 100%; height: calc(100svh + var(--skip-height) - var(--nav-height)); margin: 0; padding: 0; border: 0; background: var(--bg); }
+.brand-bar { position: absolute; z-index: 3; inset: 0 0 auto; display: flex; height: var(--brand-height); align-items: center; justify-content: space-between; gap: 16px; padding: 0 clamp(12px, 3vw, 32px); border-bottom: 1px solid var(--nav-border); background: var(--nav-bg); backdrop-filter: blur(16px); }
+.brand-lockup { display: inline-flex; min-width: 0; align-items: center; gap: 9px; color: var(--text); text-decoration: none; white-space: nowrap; }
+.brand-mark { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border: 1px solid #d5f28745; border-radius: 10px; color: var(--accent); background: var(--nav-active); font-size: 11px; font-weight: 850; letter-spacing: -.04em; }
+.brand-lockup h1 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -.035em; }
+.brand-tagline { max-width: min(58vw, 580px); margin: 0; overflow: hidden; color: var(--muted); font-size: 11px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+.category-nav { position: absolute; z-index: 2; inset: var(--brand-height) 0 auto; display: flex; min-height: calc(var(--nav-height) - var(--brand-height)); align-items: center; justify-content: center; gap: clamp(8px, 1.8vw, 24px); padding: 5px clamp(12px, 3vw, 32px); border-bottom: 1px solid var(--nav-border); background: var(--nav-bg); box-shadow: 0 8px 24px var(--nav-shadow); backdrop-filter: blur(16px); }
 .category-tab { position: relative; display: flex; flex: 1 1 0; max-width: 180px; min-width: 0; height: 73px; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 5px 12px; border: 0; border-radius: 14px; color: var(--muted); background: transparent; font: inherit; font-size: 12px; font-weight: 650; line-height: 1.2; white-space: nowrap; cursor: pointer; transition: color .18s ease, background-color .18s ease; }
-.category-tab:hover { color: var(--text); background: #ffffff0a; }
+.category-tab:hover { color: var(--text); background: var(--nav-hover); }
 .category-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.category-tab.is-active { color: var(--accent); background: #d5f28712; }
+.category-tab.is-active { color: var(--accent); background: var(--nav-active); }
 .category-tab::after { position: absolute; right: 24px; bottom: 2px; left: 24px; height: 2px; border-radius: 3px; background: var(--accent); content: ""; opacity: 0; transform: scaleX(.55); transition: opacity .18s ease, transform .18s ease; }
 .category-tab.is-active::after { opacity: 1; transform: scaleX(1); }
 .tab-icon { width: 22px; height: 22px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.65; }
@@ -33,11 +58,22 @@ html, body, .app { position: fixed; inset: 0; width: 100%; height: 100%; margin:
 .setup-card ol { margin: 20px 0 0; padding-inline-start: 22px; color: #d2dacd; font-size: 12px; line-height: 2.1; }
 .noscript { position: fixed; z-index: 5; inset: 16px 16px auto; padding: 14px; border-radius: 10px; color: #fff; background: #772d22; }
 @media (max-width: 600px) {
-  :root { --nav-height: 74px; }
+  :root { --brand-height: 44px; --nav-height: 118px; }
+  .brand-bar { gap: 8px; }
+  .brand-lockup { gap: 7px; }
+  .brand-mark { width: 27px; height: 27px; border-radius: 9px; font-size: 10px; }
+  .brand-lockup h1 { font-size: 14px; }
+  .brand-tagline { max-width: 48vw; font-size: 10px; }
   .category-nav { justify-content: space-between; gap: 2px; padding: 4px 6px; }
   .category-tab { height: 64px; gap: 3px; padding: 4px 2px; border-radius: 12px; font-size: 11px; }
   .tab-icon { width: 20px; height: 20px; }
   .category-tab::after { right: 14px; left: 14px; }
   .category-tab span { min-width: 0; }
 }
+html[data-theme="light"] .setup { background: radial-gradient(ellipse at 50% 5%, #e4ebd9 0, #f4f6f2 44rem); }
+html[data-theme="light"] .setup-card { border-color: #dce4d4; background: linear-gradient(145deg, #ffffff, #f7f9f4); box-shadow: 0 24px 70px #27331b1c; }
+html[data-theme="light"] .setup-card p { color: #5c6656; }
+html[data-theme="light"] .setup-card ol { color: #3e4938; }
+html[data-theme="light"] .setup-card code { color: var(--accent); background: #e8eee1; }
+html[data-theme="light"] .setup-icon { border-color: #557a1e38; background: #557a1e12; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

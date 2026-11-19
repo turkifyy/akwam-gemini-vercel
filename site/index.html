@@ -4,13 +4,59 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#090c0a">
-<meta name="description" content="عرض أكوام داخل إطار آمن مع ترجمة Gemini عبر Cloudflare Worker.">
-<title>أكوام | ترجمة Gemini</title>
+<meta name="description" content="Turkify Series منصة لاستكشاف المسلسلات التركية والهندية والكورية والعالمية بواجهة متعددة اللغات وترجمة ذكية. اختر القسم وابدأ التصفح بسهولة.">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+<meta name="application-name" content="Turkify Series">
+<link rel="canonical" href="https://akwam-gemini-vercel.vercel.app/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Turkify Series">
+<meta property="og:title" content="Turkify Series | مسلسلات تركية وهندية وكورية">
+<meta property="og:description" content="استكشف المسلسلات التركية والهندية والكورية والعالمية بواجهة متعددة اللغات وترجمة ذكية.">
+<meta property="og:url" content="https://akwam-gemini-vercel.vercel.app/">
+<meta property="og:locale" content="ar_AR">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Turkify Series | مسلسلات بترجمة ذكية">
+<meta name="twitter:description" content="استكشف المسلسلات التركية والهندية والكورية والعالمية بواجهة متعددة اللغات وترجمة ذكية.">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://akwam-gemini-vercel.vercel.app/#website",
+      "url": "https://akwam-gemini-vercel.vercel.app/",
+      "name": "Turkify Series",
+      "inLanguage": "ar",
+      "description": "منصة لاستكشاف المسلسلات التركية والهندية والكورية والعالمية بواجهة متعددة اللغات وترجمة ذكية."
+    },
+    {
+      "@type": "WebApplication",
+      "@id": "https://akwam-gemini-vercel.vercel.app/#app",
+      "name": "Turkify Series",
+      "url": "https://akwam-gemini-vercel.vercel.app/",
+      "applicationCategory": "EntertainmentApplication",
+      "operatingSystem": "Any",
+      "inLanguage": ["ar", "en", "tr", "fr", "de", "es", "it", "pt", "ru", "fa", "ur", "hi", "id", "ja", "ko", "zh-CN"],
+      "isPartOf": {"@id": "https://akwam-gemini-vercel.vercel.app/#website"},
+      "featureList": ["تصفح أقسام المسلسلات", "واجهة متعددة اللغات", "ترجمة ذكية لنصوص الصفحة"]
+    }
+  ]
+}
+</script>
+<title>Turkify Series | مسلسلات تركية وهندية وكورية</title>
 <link rel="stylesheet" href="/style.css">
 <script src="/config.js"></script>
 </head>
 <body>
 <main class="app">
+  <header class="brand-bar">
+    <a class="brand-lockup" href="/" aria-label="Turkify Series الصفحة الرئيسية">
+      <span class="brand-mark" aria-hidden="true">TS</span>
+      <h1 lang="en" dir="ltr">Turkify Series</h1>
+    </a>
+    <p class="brand-tagline" lang="ar" dir="rtl">مسلسلات تركية وهندية وكورية وعالمية بترجمة ذكية</p>
+  </header>
   <section class="setup" id="setup" hidden>
     <div class="setup-card">
       <div class="setup-icon" aria-hidden="true">✦</div>
@@ -45,7 +91,7 @@
     </nav>
     <iframe
       id="site-frame"
-      title="منصة أكوام مترجمة بواسطة Gemini"
+      title="المسلسلات المعروضة داخل Turkify Series"
       sandbox="allow-scripts allow-same-origin allow-forms"
       referrerpolicy="strict-origin-when-cross-origin"
       allow="fullscreen"
@@ -72,6 +118,7 @@
   let currentCategory = 'turkish';
   let workerOrigin = '';
   let currentLang = 'en';
+  let currentTheme = '';
   let skipHeight = 524;
   let translationRetryCount = 0;
   let translationRetryTimer = 0;
@@ -175,11 +222,26 @@
     document.querySelector('#setup-message').textContent = message;
   }
 
+  function updateTheme() {
+    const hour = new Date().getHours();
+    const theme = hour >= 6 && hour < 18 ? 'light' : 'dark';
+    if (theme === currentTheme) return;
+    currentTheme = theme;
+    root.dataset.theme = theme;
+    root.style.colorScheme = theme;
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) themeColor.content = theme === 'light' ? '#f4f6f2' : '#090c0a';
+    if (workerOrigin && frame.contentWindow) {
+      frame.contentWindow.postMessage({source:'akwam-gemini-bridge',type:'theme-change',theme},workerOrigin);
+    }
+  }
+
   function frameUrl(lang) {
     const target = new URL(workerOrigin + '/site/' + encodeURIComponent(lang) + '/series');
     for (const [key,value] of params) target.searchParams.set(key, value);
     for (const [key,value] of Object.entries(categoryFilters[currentCategory])) target.searchParams.set(key, value);
     target.searchParams.set('__parent', location.origin);
+    target.searchParams.set('__theme', currentTheme);
     return target.href;
   }
 
@@ -265,7 +327,11 @@
   frame.addEventListener('load', () => {
     if (!workerOrigin || !frame.contentWindow) return;
     frame.contentWindow.postMessage({source:'akwam-gemini-bridge',type:'frame-state-request'},workerOrigin);
+    frame.contentWindow.postMessage({source:'akwam-gemini-bridge',type:'theme-change',theme:currentTheme},workerOrigin);
   });
+  updateTheme();
+  setInterval(updateTheme, 60000);
+  window.addEventListener('focus', updateTheme);
   start();
 })();
 </script>
