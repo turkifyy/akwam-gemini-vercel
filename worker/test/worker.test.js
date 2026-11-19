@@ -255,7 +255,7 @@ test('navigation labels follow the detected language and set the matching direct
   }
 });
 
-test('auto-pagination waits 15 seconds at the bottom and cancels if the user scrolls away', () => {
+test('auto-pagination waits 7 seconds at the bottom and cancels if the user scrolls away', () => {
   const link = {href:'https://bridge.example.workers.dev/site/en/series?section=32&%3Bcategory=0&%3Bpage=2&__parent=https%3A%2F%2Fseries.example.vercel.app'};
   const harness = createPaginationHarness({href:'https://bridge.example.workers.dev/site/en/series?section=32&page=1',links:[link]});
   assert.equal(new URL(link.href).searchParams.get('page'), '2');
@@ -263,7 +263,7 @@ test('auto-pagination waits 15 seconds at the bottom and cancels if the user scr
   harness.documentListeners.get('scroll')({target:harness.document});
   assert.equal(harness.replacements.length, 0);
   const firstTimer = [...harness.timers.entries()][0];
-  assert.equal(firstTimer[1].delay, 15000);
+  assert.equal(firstTimer[1].delay, 7000);
 
   harness.scroller.scrollTop = 700;
   harness.documentListeners.get('scroll')({target:harness.document});
@@ -273,7 +273,7 @@ test('auto-pagination waits 15 seconds at the bottom and cancels if the user scr
   harness.scroller.scrollTop = 1200;
   harness.documentListeners.get('scroll')({target:harness.document});
   const nextTimer = [...harness.timers.values()][0];
-  assert.equal(nextTimer.delay, 15000);
+  assert.equal(nextTimer.delay, 7000);
   nextTimer.callback();
   assert.equal(harness.replacements.length, 1);
   const next = new URL(harness.replacements[0]);
@@ -284,7 +284,7 @@ test('auto-pagination waits 15 seconds at the bottom and cancels if the user scr
   assert.equal(typeof harness.windowListeners.get('scroll'), 'function');
 });
 
-test('manual next-page navigation starts a 15-second automatic advance on the new page', () => {
+test('manual next-page navigation starts a 7-second automatic advance on the new page', () => {
   const link = {href:'https://bridge.example.workers.dev/site/en/series?section=32&%3Bpage=2'};
   const first = createPaginationHarness({href:'https://bridge.example.workers.dev/site/en/series?section=32&page=1',links:[link]});
   first.documentListeners.get('click')({target:{nodeType:1,closest() { return link; }}});
@@ -299,7 +299,7 @@ test('manual next-page navigation starts a 15-second automatic advance on the ne
   assert.equal(second.storage.has(manualAdvanceKey), false);
   assert.equal(second.timers.size, 1);
   const timer = [...second.timers.values()][0];
-  assert.equal(timer.delay, 15000);
+  assert.equal(timer.delay, 7000);
   timer.callback();
   assert.equal(new URL(second.replacements[0]).searchParams.get('page'), '3');
 });
