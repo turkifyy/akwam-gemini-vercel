@@ -497,6 +497,123 @@ test('translation rejects oversized declared bodies before reading them', async 
   assert.deepEqual(await response.json(), {error:'Request body is too large'});
 });
 
+test('SEO catalog pages stay on the public origin and receive category metadata', async t => {
+  const originalFetch = globalThis.fetch;
+  const originalRewriter = globalThis.HTMLRewriter;
+  let upstreamUrl;
+  const handlers = new Map();
+  globalThis.fetch = async request => {
+    upstreamUrl = String(request.url);
+    return new Response('<!doctype html><html><head></head><body></body></html>', {headers:{'content-type':'text/html'}});
+  };
+  globalThis.HTMLRewriter = class {
+    on(selector, handler) { handlers.set(selector, handler); return this; }
+    transform(response) { return response; }
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    globalThis.HTMLRewriter = originalRewriter;
+  });
+
+  const parent = 'https://series.example.vercel.app';
+  const env = {UPSTREAM_HOST:'akwam.ss',ALLOWED_PARENT_ORIGINS:parent};
+  const url = new URL(workerUrl + '/site/ar/series?section=33&page=2&__seo=1');
+  url.searchParams.set('__parent', parent);
+  const response = await worker.fetch(new Request(url), env);
+  const upstream = new URL(upstreamUrl);
+  assert.equal(upstream.hostname, 'akwam.ss');
+  assert.equal(upstream.searchParams.get('__parent'), null);
+  assert.equal(upstream.searchParams.get('__seo'), null);
+  assert.equal(upstream.searchParams.get('section'), '33');
+  assert.equal(response.status, 200);
+
+  const element = attributes => ({
+    attributes:{...attributes},
+    text:'',
+    getAttribute(name) { return this.attributes[name] ?? null; },
+    setAttribute(name,value) { this.attributes[name] = String(value); },
+    setInnerContent(value) { this.text = String(value); }
+  });
+  const canonical = element({href:'https://akwam.ss/series'});
+  handlers.get('link[rel="canonical"]').element(canonical);
+  assert.equal(canonical.attributes.href, parent + '/catalog/korean?page=2');
+  const socialUrl = element({content:'https://akwam.ss/series'});
+  handlers.get('meta[property="og:url"]').element(socialUrl);
+  assert.equal(socialUrl.attributes.content, canonical.attributes.href);
+  const title = element({});
+  handlers.get('title').element(title);
+  assert.equal(title.text, 'مسلسلات كورية مترجمة | Turkify Series');
+  const heading = element({});
+  handlers.get('h1.name').element(heading);
+  assert.equal(heading.text, 'مسلسلات كورية');
+  const link = element({href:'https://akwam.ss/series/5946/the-perfect-lie'});
+  handlers.get('[href]').element(link);
+  assert.equal(link.attributes.href, parent + '/catalog/ar/series/5946/the-perfect-lie');
+});
+
+test('SEO bootstrap preserves public catalog routes', () => {
+  const parentOrigin = 'https://series.example.vercel.app';
+  const assignments = [];
+  const attributes = {href:'https://akwam.ss/series/5946/the-perfect-lie'};
+  const link = {
+    nodeType:1,
+    tagName:'A',
+    getAttribute(name) { return attributes[name] ?? null; },
+    setAttribute(name,value) { attributes[name] = String(value); },
+    hasAttribute() { return false; }
+  };
+  const window = {
+    __AKWAM_BRIDGE__:{lang:'ar',parentOrigin:'',upstreamHost:'akwam.ss',seoMode:true},
+    fetch:async () => new Response(),
+    parent:{postMessage() {}}
+  };
+  const location = {
+    origin:parentOrigin,
+    href:parentOrigin + '/catalog/ar/series',
+    assign(url) { assignments.push(url); }
+  };
+  const root = {nodeType:1,tagName:'HTML',getAttribute() { return null; },querySelectorAll() { return [link]; }};
+  class TestXHR { open() {} }
+  class TestMutationObserver { observe() {} }
+  runInNewContext(bootstrapScript, {
+    window,location,URL,Request,XMLHttpRequest:TestXHR,
+    history:{pushState() {},replaceState() {}},
+    document:{documentElement:root},MutationObserver:TestMutationObserver
+  });
+
+  assert.equal(attributes.href, parentOrigin + '/catalog/ar/series/5946/the-perfect-lie');
+  assert.equal(window.open('https://akwam.ss/series/5946/the-perfect-lie', '_self'), window);
+  assert.equal(new URL(assignments[0]).pathname, '/catalog/ar/series/5946/the-perfect-lie');
+  assert.equal(new URL(assignments[0]).searchParams.get('__parent'), null);
+});
+
+test('Vercel exposes clean category and same-origin proxy routes', async () => {
+  const config = JSON.parse(await readFile(new URL('../../site/vercel.json', import.meta.url), 'utf8'));
+  const sources = new Set(config.rewrites.map(route => route.source));
+  for (const category of ['turkish','indian','korean','foreign']) assert.ok(sources.has('/catalog/' + category));
+  assert.ok(sources.has('/catalog/:lang/:path*'));
+  assert.ok(sources.has('/api/translate'));
+});
+
+test('translation accepts only the configured site origin in addition to the Worker origin', async t => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({candidates:[{content:{parts:[{text:JSON.stringify({translations:['مسلسل']})}]}}]});
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  const parent = 'https://series.example.vercel.app';
+  const body = JSON.stringify({targetLang:'ar',texts:['Series']});
+  const allowed = await worker.fetch(new Request(workerUrl + '/api/translate', {
+    method:'POST',headers:{Origin:parent,'Content-Type':'application/json'},body
+  }), {ALLOWED_PARENT_ORIGINS:parent,GEMINI_API_KEY:'test-secret'});
+  assert.equal(allowed.status, 200);
+  assert.deepEqual(await allowed.json(), {translations:['مسلسل']});
+
+  const denied = await worker.fetch(new Request(workerUrl + '/api/translate', {
+    method:'POST',headers:{Origin:'https://attacker.example','Content-Type':'application/json'},body
+  }), {ALLOWED_PARENT_ORIGINS:parent,GEMINI_API_KEY:'test-secret'});
+  assert.equal(denied.status, 403);
+});
+
 test('site proxy stays on the configured upstream and permits only the configured frame parent', async t => {
   const originalFetch = globalThis.fetch;
   const originalRewriter = globalThis.HTMLRewriter;

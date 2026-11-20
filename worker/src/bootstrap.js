@@ -4,7 +4,9 @@ export const bootstrapScript = String.raw`(() => {
   const lang = String(config.lang || 'ar');
   const parentOrigin = String(config.parentOrigin || '');
   const upstreamHost = String(config.upstreamHost || 'akwam.ss');
-  const prefix = location.origin + '/site/' + lang;
+  const seoMode = config.seoMode === true;
+  const routePath = (seoMode ? '/catalog/' : '/site/') + lang;
+  const prefix = location.origin + routePath;
   const originalFetch = window.fetch.bind(window);
 
   function internal(path) {
@@ -21,13 +23,13 @@ export const bootstrapScript = String.raw`(() => {
       url = new URL(prefix + url.pathname + url.search + url.hash);
     } else if (url.origin === location.origin) {
       if (internal(url.pathname)) return raw;
-      if (!url.pathname.startsWith('/site/' + lang + '/')) {
+      if (url.pathname !== routePath && !url.pathname.startsWith(routePath + '/')) {
         url = new URL(prefix + url.pathname + url.search + url.hash);
       }
     } else {
       return raw;
     }
-    if (parentOrigin) url.searchParams.set('__parent', parentOrigin);
+    if (parentOrigin && !seoMode) url.searchParams.set('__parent', parentOrigin);
     return url.href;
   }
 
@@ -54,7 +56,7 @@ export const bootstrapScript = String.raw`(() => {
       const destination = new URL(String(url), location.href);
       if (destination.protocol !== 'http:' && destination.protocol !== 'https:') return null;
       const routed = new URL(proxyUrl(destination.href), location.href);
-      const internalPath = '/site/' + lang;
+      const internalPath = routePath;
       const isInternal = routed.origin === location.origin &&
         (routed.pathname === internalPath || routed.pathname.startsWith(internalPath + '/'));
       if (isInternal || String(target || '').toLowerCase() === '_self') {
@@ -86,7 +88,7 @@ export const bootstrapScript = String.raw`(() => {
         try {
           const destination = new URL(node.getAttribute('href'), location.href);
           if (destination.origin === location.origin &&
-              (destination.pathname === '/site/' + lang || destination.pathname.startsWith('/site/' + lang + '/'))) {
+              (destination.pathname === routePath || destination.pathname.startsWith(routePath + '/'))) {
             node.setAttribute('target', '_self');
           }
         } catch (_) {}

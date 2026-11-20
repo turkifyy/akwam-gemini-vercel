@@ -4,7 +4,9 @@ const bootstrapScript = String.raw`(() => {
   const lang = String(config.lang || 'ar');
   const parentOrigin = String(config.parentOrigin || '');
   const upstreamHost = String(config.upstreamHost || 'akwam.ss');
-  const prefix = location.origin + '/site/' + lang;
+  const seoMode = config.seoMode === true;
+  const routePath = (seoMode ? '/catalog/' : '/site/') + lang;
+  const prefix = location.origin + routePath;
   const originalFetch = window.fetch.bind(window);
 
   function internal(path) {
@@ -21,13 +23,13 @@ const bootstrapScript = String.raw`(() => {
       url = new URL(prefix + url.pathname + url.search + url.hash);
     } else if (url.origin === location.origin) {
       if (internal(url.pathname)) return raw;
-      if (!url.pathname.startsWith('/site/' + lang + '/')) {
+      if (url.pathname !== routePath && !url.pathname.startsWith(routePath + '/')) {
         url = new URL(prefix + url.pathname + url.search + url.hash);
       }
     } else {
       return raw;
     }
-    if (parentOrigin) url.searchParams.set('__parent', parentOrigin);
+    if (parentOrigin && !seoMode) url.searchParams.set('__parent', parentOrigin);
     return url.href;
   }
 
@@ -54,7 +56,7 @@ const bootstrapScript = String.raw`(() => {
       const destination = new URL(String(url), location.href);
       if (destination.protocol !== 'http:' && destination.protocol !== 'https:') return null;
       const routed = new URL(proxyUrl(destination.href), location.href);
-      const internalPath = '/site/' + lang;
+      const internalPath = routePath;
       const isInternal = routed.origin === location.origin &&
         (routed.pathname === internalPath || routed.pathname.startsWith(internalPath + '/'));
       if (isInternal || String(target || '').toLowerCase() === '_self') {
@@ -86,7 +88,7 @@ const bootstrapScript = String.raw`(() => {
         try {
           const destination = new URL(node.getAttribute('href'), location.href);
           if (destination.origin === location.origin &&
-              (destination.pathname === '/site/' + lang || destination.pathname.startsWith('/site/' + lang + '/'))) {
+              (destination.pathname === routePath || destination.pathname.startsWith(routePath + '/'))) {
             node.setAttribute('target', '_self');
           }
         } catch (_) {}
@@ -440,6 +442,12 @@ const translatorScript = String.raw`(() => {
 
 const DEFAULT_UPSTREAM = 'akwam.ss';
 const ALLOWED_LANGUAGES = new Set(['ar','en','tr','fr','de','es','it','pt','ru','fa','ur','hi','id','ja','ko','zh-CN']);
+const SEO_CATEGORIES = new Map([
+  ['30',{slug:'foreign',title:'مسلسلات عالمية مترجمة | Turkify Series',heading:'مسلسلات عالمية',description:'تصفح تصنيف المسلسلات العالمية المترجمة، واكتشف العناوين والتقييمات وتفاصيل الحلقات على Turkify Series.'}],
+  ['31',{slug:'indian',title:'مسلسلات هندية مترجمة | Turkify Series',heading:'مسلسلات هندية',description:'تصفح تصنيف المسلسلات الهندية المترجمة، واكتشف العناوين والتقييمات وتفاصيل الحلقات على Turkify Series.'}],
+  ['32',{slug:'turkish',title:'مسلسلات تركية مترجمة | Turkify Series',heading:'مسلسلات تركية',description:'تصفح تصنيف المسلسلات التركية المترجمة، واكتشف العناوين والتقييمات وتفاصيل الحلقات على Turkify Series.'}],
+  ['33',{slug:'korean',title:'مسلسلات كورية مترجمة | Turkify Series',heading:'مسلسلات كورية',description:'تصفح تصنيف المسلسلات الكورية المترجمة، واكتشف العناوين والتقييمات وتفاصيل الحلقات على Turkify Series.'}]
+]);
 const MAX_ITEMS = 20;
 const MAX_ITEM_CHARS = 700;
 const MAX_BATCH_CHARS = 9000;
@@ -511,8 +519,9 @@ async function handleVisitor(request, env) {
 
 async function handleTranslate(request, env) {
   if (request.method !== 'POST') return json({error:'Use POST'}, 405);
-  const origin = request.headers.get('Origin');
-  if (origin !== new URL(request.url).origin) return json({error:'Origin not allowed'}, 403);
+  const origin = request.headers.get('Origin') || '';
+  const requestOrigin = new URL(request.url).origin;
+  if (origin !== requestOrigin && !allowedParents(env).has(origin)) return json({error:'Origin not allowed'}, 403);
   const declaredLength = Number(request.headers.get('Content-Length') || 0);
   if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
     return json({error:'Request body is too large'}, 413);
@@ -583,9 +592,12 @@ async function proxyAkwam(request, env, url) {
   const workerOrigin = url.origin;
   const parentParam = url.searchParams.get('__parent') || '';
   const parentOrigin = allowedParents(env).has(parentParam) ? parentParam : '';
+  const seoMode = url.searchParams.get('__seo') === '1' && Boolean(parentOrigin);
+  const seoCategory = url.pathname.endsWith('/series') ? SEO_CATEGORIES.get(url.searchParams.get('section')) : null;
+  const publicOrigin = seoMode ? parentOrigin : '';
   const path = match[2] ? '/' + match[2] : '/';
   const upstreamUrl = new URL(path, 'https://' + upstreamHost);
-  for (const [key,value] of url.searchParams) if (key !== '__parent') upstreamUrl.searchParams.append(key, value);
+  for (const [key,value] of url.searchParams) if (key !== '__parent' && key !== '__seo') upstreamUrl.searchParams.append(key, value);
 
   const headers = new Headers(request.headers);
   for (const name of ['host','content-length','accept-encoding','origin','referer','cf-connecting-ip','cf-ray','x-forwarded-host','x-forwarded-proto']) headers.delete(name);
@@ -609,52 +621,70 @@ async function proxyAkwam(request, env, url) {
   if (location && upstreamResponse.status >= 300 && upstreamResponse.status < 400) {
     const target = new URL(location, upstreamUrl);
     const targetLocation = target.hostname === upstreamHost
-      ? proxyUrl(workerOrigin, lang, target.pathname + target.search + target.hash, parentOrigin)
+      ? proxyUrl(workerOrigin, lang, target.pathname + target.search + target.hash, parentOrigin, publicOrigin)
       : target.href;
-    const redirectHeaders = responseHeaders(upstreamResponse, parentOrigin);
+    const redirectHeaders = responseHeaders(upstreamResponse, parentOrigin, seoMode);
     redirectHeaders.set('Location', targetLocation);
     return new Response(null, {status:upstreamResponse.status, headers:redirectHeaders});
   }
 
   const contentType = upstreamResponse.headers.get('content-type') || '';
-  const outHeaders = responseHeaders(upstreamResponse, parentOrigin);
+  const outHeaders = responseHeaders(upstreamResponse, parentOrigin, seoMode);
   if (contentType.includes('text/html')) {
     outHeaders.set('Content-Security-Policy', "frame-ancestors 'self'" + (parentOrigin ? ' ' + parentOrigin : ''));
-    const inlineConfig = '<script>window.__AKWAM_BRIDGE__=' + JSON.stringify({lang,parentOrigin,upstreamHost}) + ';</script>' +
+    const bridgeParent = seoMode ? '' : parentOrigin;
+    const inlineConfig = '<script>window.__AKWAM_BRIDGE__=' + JSON.stringify({lang,parentOrigin:bridgeParent,upstreamHost,seoMode}) + ';</script>' +
       '<script src="' + workerOrigin + '/__bridge/bootstrap.js"></script>';
     const rewriter = new HTMLRewriter()
-      .on('[href]', {element:element => rewriteAttribute(element,'href',upstreamUrl,workerOrigin,lang,parentOrigin)})
-      .on('[src]', {element:element => rewriteAttribute(element,'src',upstreamUrl,workerOrigin,lang,parentOrigin)})
-      .on('[action]', {element:element => rewriteAttribute(element,'action',upstreamUrl,workerOrigin,lang,parentOrigin)})
-      .on('[srcset]', {element:element => rewriteSrcset(element,upstreamUrl,workerOrigin,lang,parentOrigin)})
+      .on('[href]', {element:element => rewriteAttribute(element,'href',upstreamUrl,workerOrigin,lang,parentOrigin,publicOrigin)})
+      .on('[src]', {element:element => rewriteAttribute(element,'src',upstreamUrl,workerOrigin,lang,parentOrigin,publicOrigin)})
+      .on('[action]', {element:element => rewriteAttribute(element,'action',upstreamUrl,workerOrigin,lang,parentOrigin,publicOrigin)})
+      .on('[srcset]', {element:element => rewriteSrcset(element,upstreamUrl,workerOrigin,lang,parentOrigin,publicOrigin)})
       .on('meta[http-equiv]', {element(element) {
         if ((element.getAttribute('http-equiv') || '').toLowerCase() === 'content-security-policy') element.remove();
       }})
       .on('head', {element(element) { element.prepend(inlineConfig, {html:true}); }})
       .on('body', {element(element) { element.append('<script src="' + workerOrigin + '/__bridge/translator.js"></script>', {html:true}); }});
+    if (seoMode) {
+      const canonical = seoCanonicalUrl(url, lang, parentOrigin, seoCategory);
+      rewriter
+        .on('link[rel="canonical"]', {element:element => element.setAttribute('href', canonical)})
+        .on('meta[property="og:url"]', {element:element => element.setAttribute('content', canonical)});
+    }
+    if (seoCategory) {
+      rewriter
+        .on('html', {element(element) { element.setAttribute('lang','ar'); element.setAttribute('dir','rtl'); }})
+        .on('title', {element:element => element.setInnerContent(seoCategory.title)})
+        .on('h1.name', {element:element => element.setInnerContent(seoCategory.heading)})
+        .on('meta[name="description"]', {element:element => element.setAttribute('content', seoCategory.description)})
+        .on('meta[property="og:title"]', {element:element => element.setAttribute('content', seoCategory.title)})
+        .on('meta[property="og:description"]', {element:element => element.setAttribute('content', seoCategory.description)})
+        .on('meta[name="twitter:title"]', {element:element => element.setAttribute('content', seoCategory.title)})
+        .on('meta[name="twitter:description"]', {element:element => element.setAttribute('content', seoCategory.description)});
+    }
     const rewrittenResponse = rewriter.transform(upstreamResponse);
     return new Response(rewrittenResponse.body, {status:upstreamResponse.status, headers:outHeaders});
   }
   if (contentType.includes('text/css')) {
     const css = await upstreamResponse.text();
-    const rewritten = rewriteCss(css, upstreamHost, workerOrigin, lang);
+    const rewritten = rewriteCss(css, upstreamHost, workerOrigin, lang, publicOrigin);
     outHeaders.delete('Content-Length');
     return new Response(rewritten, {status:upstreamResponse.status, headers:outHeaders});
   }
   return new Response(upstreamResponse.body, {status:upstreamResponse.status, headers:outHeaders});
 }
 
-function rewriteAttribute(element, name, upstreamUrl, workerOrigin, lang, parentOrigin) {
+function rewriteAttribute(element, name, upstreamUrl, workerOrigin, lang, parentOrigin, publicOrigin = '') {
   const value = element.getAttribute(name);
   if (!value || /^(?:#|javascript:|data:|mailto:|tel:|blob:)/i.test(value)) return;
   let target;
   try { target = new URL(value, upstreamUrl); }
   catch (_) { return; }
   if (target.hostname !== upstreamUrl.hostname || !['http:','https:'].includes(target.protocol)) return;
-  element.setAttribute(name, proxyUrl(workerOrigin, lang, target.pathname + target.search + target.hash, parentOrigin));
+  element.setAttribute(name, proxyUrl(workerOrigin, lang, target.pathname + target.search + target.hash, parentOrigin, publicOrigin));
 }
 
-function rewriteSrcset(element, base, workerOrigin, lang, parentOrigin) {
+function rewriteSrcset(element, base, workerOrigin, lang, parentOrigin, publicOrigin = '') {
   const value = element.getAttribute('srcset');
   if (!value) return;
   const rewritten = value.replace(/(^|,\s*)(\/[^,\s]+|https?:\/\/akwam\.ss\/[^,\s]+)/gi, (whole, prefix, item) => {
@@ -662,19 +692,36 @@ function rewriteSrcset(element, base, workerOrigin, lang, parentOrigin) {
     try { target = new URL(item, base); }
     catch (_) { return whole; }
     if (target.hostname !== base.hostname) return whole;
-    return prefix + proxyUrl(workerOrigin, lang, target.pathname + target.search + target.hash, parentOrigin);
+    return prefix + proxyUrl(workerOrigin, lang, target.pathname + target.search + target.hash, parentOrigin, publicOrigin);
   });
   if (rewritten !== value) element.setAttribute('srcset', rewritten);
 }
 
-function proxyUrl(workerOrigin, lang, pathAndQuery, parentOrigin) {
-  const target = new URL('/site/' + lang + pathAndQuery, workerOrigin);
-  if (parentOrigin) target.searchParams.set('__parent', parentOrigin);
+function proxyUrl(workerOrigin, lang, pathAndQuery, parentOrigin, publicOrigin = '') {
+  const target = publicOrigin
+    ? new URL('/catalog/' + lang + pathAndQuery, publicOrigin)
+    : new URL('/site/' + lang + pathAndQuery, workerOrigin);
+  if (parentOrigin && !publicOrigin) target.searchParams.set('__parent', parentOrigin);
   return target.href;
 }
 
-function rewriteCss(css, host, workerOrigin, lang) {
-  const prefix = workerOrigin + '/site/' + lang;
+function seoCanonicalUrl(url, lang, parentOrigin, category) {
+  const target = category
+    ? new URL('/catalog/' + category.slug, parentOrigin)
+    : new URL('/catalog' + url.pathname.slice('/site'.length), parentOrigin);
+  if (category) {
+    const page = Number(url.searchParams.get('page'));
+    if (Number.isSafeInteger(page) && page > 1) target.searchParams.set('page', String(page));
+  } else {
+    for (const [key,value] of url.searchParams) {
+      if (!['__parent','__seo','__theme'].includes(key)) target.searchParams.append(key, value);
+    }
+  }
+  return target.href;
+}
+
+function rewriteCss(css, host, workerOrigin, lang, publicOrigin = '') {
+  const prefix = publicOrigin ? publicOrigin + '/catalog/' + lang : workerOrigin + '/site/' + lang;
   const rootPath = /url\(\s*(?:"(\/(?!\/)[^)"\s]+)"|'(\/(?!\/)[^)'\s]+)'|(\/(?!\/)[^)\s]+))\s*\)/gi;
   return css.replace(rootPath, (whole, doubleQuoted, singleQuoted, unquoted) => {
     const path = doubleQuoted || singleQuoted || unquoted;
@@ -684,24 +731,24 @@ function rewriteCss(css, host, workerOrigin, lang) {
     .replace(new RegExp('https?:\\/\\/' + host.replaceAll('.', '\\.') + '(\\/[^\\s)\'\"]*)', 'gi'), prefix + '$1');
 }
 
-function responseHeaders(response, parentOrigin) {
+function responseHeaders(response, parentOrigin, seoMode = false) {
   const headers = new Headers(response.headers);
   for (const name of ['content-length','content-encoding','transfer-encoding','content-security-policy','content-security-policy-report-only','x-frame-options','cross-origin-opener-policy','cross-origin-embedder-policy','cross-origin-resource-policy']) headers.delete(name);
   headers.set('Cache-Control','no-store');
   headers.set('Referrer-Policy','same-origin');
   if (parentOrigin) headers.set('Content-Security-Policy', "frame-ancestors 'self' " + parentOrigin);
-  rewriteSetCookies(headers, response.headers);
+  rewriteSetCookies(headers, response.headers, seoMode ? '/catalog/' : '/site/');
   return headers;
 }
 
-function rewriteSetCookies(target, source) {
+function rewriteSetCookies(target, source, path = '/site/') {
   const cookies = typeof source.getSetCookie === 'function' ? source.getSetCookie() : [];
   if (!cookies.length) return;
   target.delete('set-cookie');
   for (let cookie of cookies) {
     cookie = cookie.replace(/;\s*Domain=[^;]*/i, '');
-    if (/;\s*Path=/i.test(cookie)) cookie = cookie.replace(/;\s*Path=[^;]*/i, '; Path=/site/');
-    else cookie += '; Path=/site/';
+    if (/;\s*Path=/i.test(cookie)) cookie = cookie.replace(/;\s*Path=[^;]*/i, '; Path=' + path);
+    else cookie += '; Path=' + path;
     target.append('set-cookie', cookie);
   }
 }
