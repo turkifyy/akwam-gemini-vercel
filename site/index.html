@@ -113,6 +113,7 @@
   let currentLang = 'en';
   let currentTheme = '';
   let skipHeight = 524;
+  let currentFrameKind = "archive";
   let translationRetryCount = 0;
   let translationRetryTimer = 0;
   let languageRevision = 0;
@@ -253,7 +254,11 @@
   document.querySelectorAll('.category-tab').forEach(button => {
     button.addEventListener('click', () => {
       const category = button.dataset.category;
-      if (!categoryFilters[category] || category === currentCategory) return;
+      if (!categoryFilters[category]) return;
+      if (category === currentCategory) {
+        if (currentFrameKind === "detail") openLanguage(currentLang);
+        return;
+      }
       currentCategory = category;
       document.querySelectorAll('.category-tab').forEach(tab => {
         const active = tab === button;
@@ -292,6 +297,7 @@
     const data = event.data;
     if (data?.source !== 'akwam-gemini-bridge') return;
     if (data.type === 'frame-state' && ['archive','detail'].includes(data.kind)) {
+      currentFrameKind = data.kind;
       const height = Number(data.skipHeight);
       if (Number.isFinite(height) && height >= 0 && height <= 600) {
         skipHeight = Math.ceil(height);
