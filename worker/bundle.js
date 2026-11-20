@@ -567,7 +567,7 @@ async function handleTranslate(request, env) {
   } catch (_) {
     return json({error:'Gemini returned an invalid translation response'}, 502);
   }
-  const translations = Array.isArray(answer) ? answer : answer.translations;
+  const translations = Array.isArray(answer) ? answer : answer?.translations;
   if (!Array.isArray(translations) || translations.length !== texts.length || translations.some(value => typeof value !== 'string')) {
     return json({error:'Gemini returned an incomplete translation'}, 502);
   }

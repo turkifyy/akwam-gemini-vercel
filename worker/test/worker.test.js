@@ -132,11 +132,14 @@ function createNavigationHarness(script,{country,language}) {
     const span = {textContent:''};
     const attributes = {};
     const classes = new Set(category === 'turkish' ? ['is-active'] : []);
+    const listeners = new Map();
     return {
+      listeners,
+      click() { listeners.get('click')?.(); },
       dataset:{category},
       classList:{toggle(name,active) { active ? classes.add(name) : classes.delete(name); }},
       setAttribute(name,value) { attributes[name] = value; },
-      addEventListener() {},
+      addEventListener(type, listener) { listeners.set(type, listener); },
       querySelector(selector) { return selector === 'span' ? span : null; },
       get labels() { return span.textContent; },
       attributes
@@ -147,7 +150,7 @@ function createNavigationHarness(script,{country,language}) {
     setAttribute(name,value) { this.attributes[name] = value; },
     querySelectorAll() { return buttons; }
   };
-  const root = {lang:'ar',dir:'rtl',style:{setProperty() {}}};
+  const root = {lang:'ar',dir:'rtl',dataset:{},style:{setProperty() {}}};
   const setup = {hidden:true};
   const frameStage = {hidden:true};
   const frame = {src:'',contentWindow:{postMessage() {}},addEventListener() {}};
@@ -165,7 +168,10 @@ function createNavigationHarness(script,{country,language}) {
     },
     querySelectorAll(selector) { return selector === '.category-tab' ? buttons : []; }
   };
-  const window = {AKWAM_WORKER_URL:'https://bridge.example.workers.dev',addEventListener() {}};
+  const windowListeners = new Map();
+  const timers = new Map();
+  let timerId = 0;
+  const window = {AKWAM_WORKER_URL:'https://bridge.example.workers.dev',addEventListener(type, listener) { windowListeners.set(type, listener); }};
   runInNewContext(script, {
     window,
     document,
@@ -177,10 +183,11 @@ function createNavigationHarness(script,{country,language}) {
     fetch:async url => String(url).endsWith('/health')
       ? {ok:true,json:async() => ({ok:true,geminiConfigured:true})}
       : {ok:true,json:async() => ({country})},
-    setTimeout,
-    clearTimeout
+    setTimeout(callback, delay) { const id=++timerId; timers.set(id,{callback,delay}); return id; },
+    clearTimeout(id) { timers.delete(id); },
+    setInterval() { return 0; }
   });
-  return {buttons,frame,frameStage,nav,root,setup};
+  return {buttons,frame,frameStage,nav,root,setup,windowListeners,timers};
 }
 
 test('health only answers the configured Vercel origin', async () => {
@@ -253,6 +260,40 @@ test('navigation labels follow the detected language and set the matching direct
     assert.match(harness.frame.src, new RegExp('/site/' + language.replace('-', '\\-') + '/series'));
     assert.equal(harness.frameStage.hidden, false);
   }
+});
+
+test('retry preserves the detail page and the active category returns to its listing', async () => {
+  const page = await readFile(new URL('../../site/index.html', import.meta.url), 'utf8');
+  const script = page.match(/<script>s*([sS]*?)s*</script>/)?.[1];
+  const harness = createNavigationHarness(script,{country:'US',language:'en'});
+  await new Promise(resolve => setTimeout(resolve,0));
+  const archive = harness.frame.src;
+  harness.buttons[0].click();
+  assert.equal(harness.frame.src, archive);
+
+  const detail = 'https://bridge.example.workers.dev/site/en/series/5778/detail';
+  harness.frame.src = detail;
+  const send = data => harness.windowListeners.get('message')({
+    origin:workerUrl,
+    source:harness.frame.contentWindow,
+    data:Object.assign({source:'akwam-gemini-bridge'}, data)
+  });
+  send({type:'frame-state',kind:'detail',skipHeight:120});
+  send({type:'translation-error',retryable:true,message:'Temporary failure'});
+  const retry = [...harness.timers.values()].find(timer => timer.delay === 1500);
+  assert.ok(retry);
+  retry.callback();
+  assert.equal(harness.frame.src, detail);
+
+  harness.buttons[0].click();
+  const listing = new URL(harness.frame.src);
+  assert.equal(listing.pathname, '/site/en/series');
+  assert.equal(listing.searchParams.get('section'), '32');
+
+  harness.buttons[1].click();
+  const newArchive = harness.frame.src;
+  harness.buttons[1].click();
+  assert.equal(harness.frame.src, newArchive);
 });
 
 test('auto-pagination waits 7 seconds at the bottom and cancels if the user scrolls away', () => {
@@ -399,6 +440,21 @@ test('translation validates the caller and sends the API key only in a header', 
     method:'POST',headers:{Origin:'https://attacker.example','Content-Type':'application/json'},body:'{}'
   }), {GEMINI_API_KEY:'test-secret'});
   assert.equal(denied.status, 403);
+});
+
+test('translation returns a client-safe error for a null Gemini response', async t => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({candidates:[{content:{parts:[{text:'null'}]}}]});
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  const request = new Request(workerUrl + '/api/translate', {
+    method:'POST',
+    headers:{Origin:workerUrl,'Content-Type':'application/json'},
+    body:JSON.stringify({targetLang:'ar',texts:['Hello']})
+  });
+  const response = await worker.fetch(request, {GEMINI_API_KEY:'test-secret'});
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), {error:'Gemini returned an incomplete translation'});
 });
 
 test('translation rejects oversized and malformed batches before calling Gemini', async () => {
