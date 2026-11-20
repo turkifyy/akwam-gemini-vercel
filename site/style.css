@@ -31,6 +31,7 @@ html[data-theme="light"] {
   --nav-active: #557a1e18;
 }
 * { box-sizing: border-box; }
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
 .site-intro { position: fixed; z-index: 3; inset: 0 0 auto; display: flex; height: var(--intro-height); flex-direction: column; justify-content: center; gap: 4px; padding: 8px clamp(14px, 3vw, 36px); border-bottom: 1px solid var(--nav-border); background: var(--bg); }
 .site-intro h1 { margin: 0; font-size: clamp(18px, 2vw, 24px); line-height: 1.3; letter-spacing: -.025em; }
 .site-intro p { max-width: 1100px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
