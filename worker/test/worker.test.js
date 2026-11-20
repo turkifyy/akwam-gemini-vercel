@@ -517,13 +517,13 @@ test('SEO catalog pages stay on the public origin and receive category metadata'
 
   const parent = 'https://series.example.vercel.app';
   const env = {UPSTREAM_HOST:'akwam.ss',ALLOWED_PARENT_ORIGINS:parent};
-  const url = new URL(workerUrl + '/site/ar/series?section=33&page=2&__seo=1');
+  const url = new URL(workerUrl + '/site/ar/series?section=33&page=2&seo=1');
   url.searchParams.set('__parent', parent);
   const response = await worker.fetch(new Request(url), env);
   const upstream = new URL(upstreamUrl);
   assert.equal(upstream.hostname, 'akwam.ss');
   assert.equal(upstream.searchParams.get('__parent'), null);
-  assert.equal(upstream.searchParams.get('__seo'), null);
+  assert.equal(upstream.searchParams.get('seo'), null);
   assert.equal(upstream.searchParams.get('section'), '33');
   assert.equal(response.status, 200);
 
