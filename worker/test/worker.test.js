@@ -264,7 +264,7 @@ test('navigation labels follow the detected language and set the matching direct
 
 test('retry preserves the detail page and the active category returns to its listing', async () => {
   const page = await readFile(new URL('../../site/index.html', import.meta.url), 'utf8');
-  const script = page.match(/<script>s*([sS]*?)s*</script>/)?.[1];
+  const script = page.slice(page.indexOf('<script>') + 8, page.lastIndexOf('</script>'));
   const harness = createNavigationHarness(script,{country:'US',language:'en'});
   await new Promise(resolve => setTimeout(resolve,0));
   const archive = harness.frame.src;

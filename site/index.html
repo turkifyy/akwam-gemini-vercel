@@ -248,6 +248,11 @@
     }
     currentLang = lang;
     root.style.setProperty('--skip-height', skipHeight + 'px');
+    if (retry && frame.src) {
+      frame.src = frame.src;
+      return;
+    }
+    currentFrameKind = 'archive';
     frame.src = frameUrl(lang);
   }
 
