@@ -31,7 +31,7 @@ html[data-theme="light"] {
   --nav-active: #557a1e18;
 }
 * { box-sizing: border-box; }
-.site-intro { position: fixed; z-index: 3; inset: 0 0 auto; display: flex; height: var(--intro-height); flex-direction: column; justify-content: center; gap: 4px; padding: 8px clamp(14px, 3vw, 36px); border-bottom: 1px solid var(--nav-border); background: var(--nav-bg); }
+.site-intro { position: fixed; z-index: 3; inset: 0 0 auto; display: flex; height: var(--intro-height); flex-direction: column; justify-content: center; gap: 4px; padding: 8px clamp(14px, 3vw, 36px); border-bottom: 1px solid var(--nav-border); background: var(--bg); }
 .site-intro h1 { margin: 0; font-size: clamp(18px, 2vw, 24px); line-height: 1.3; letter-spacing: -.025em; }
 .site-intro p { max-width: 1100px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
 html, body, .app { position: fixed; inset: 0; width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
@@ -65,7 +65,7 @@ html, body, .app { position: fixed; inset: 0; width: 100%; height: 100%; margin:
   .category-tab::after { right: 14px; left: 14px; }
   .category-tab span { min-width: 0; }
 }
-html[data-theme="light"] .site-intro { background: var(--nav-bg); }
+html[data-theme="light"] .site-intro { background: var(--bg); }
 html[data-theme="light"] .setup { background: radial-gradient(ellipse at 50% 5%, #e4ebd9 0, #f4f6f2 44rem); }
 html[data-theme="light"] .setup-card { border-color: #dce4d4; background: linear-gradient(145deg, #ffffff, #f7f9f4); box-shadow: 0 24px 70px #27331b1c; }
 html[data-theme="light"] .setup-card p { color: #5c6656; }
