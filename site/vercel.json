@@ -1,1 +1,51 @@
-{"headers":[{"source":"/(.*)","headers":[{"key":"X-Content-Type-Options","value":"nosniff"},{"key":"Referrer-Policy","value":"strict-origin-when-cross-origin"},{"key":"Permissions-Policy","value":"camera=(), microphone=(), geolocation=()"}]}]}
+{
+  "rewrites": [
+    {
+      "source": "/api/translate",
+      "destination": "https://turkifyseries.osamalovirboy.workers.dev/api/translate"
+    },
+    {
+      "source": "/api/visitor",
+      "destination": "https://turkifyseries.osamalovirboy.workers.dev/api/visitor"
+    },
+    {
+      "source": "/catalog/turkish",
+      "destination": "https://turkifyseries.osamalovirboy.workers.dev/site/ar/series?section=32&category=0&rating=0&year=0&language=0&formats=0&quality=0&page=1&__parent=https%3A%2F%2Fakwam-gemini-vercel.vercel.app&seo=1"
+    },
+    {
+      "source": "/catalog/indian",
+      "destination": "https://turkifyseries.osamalovirboy.workers.dev/site/ar/series?section=31&category=0&rating=0&year=0&language=0&formats=0&quality=0&page=1&__parent=https%3A%2F%2Fakwam-gemini-vercel.vercel.app&seo=1"
+    },
+    {
+      "source": "/catalog/korean",
+      "destination": "https://turkifyseries.osamalovirboy.workers.dev/site/ar/series?section=33&category=0&rating=0&year=0&language=12&formats=0&quality=0&page=1&__parent=https%3A%2F%2Fakwam-gemini-vercel.vercel.app&seo=1"
+    },
+    {
+      "source": "/catalog/foreign",
+      "destination": "https://turkifyseries.osamalovirboy.workers.dev/site/ar/series?section=30&category=0&rating=0&year=0&language=0&formats=0&quality=0&page=1&__parent=https%3A%2F%2Fakwam-gemini-vercel.vercel.app&seo=1"
+    },
+    {
+      "source": "/catalog/:lang/:path*",
+      "destination": "https://turkifyseries.osamalovirboy.workers.dev/site/:lang/:path*?__parent=https%3A%2F%2Fakwam-gemini-vercel.vercel.app&seo=1"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        }
+      ]
+    }
+  ]
+}
