@@ -153,12 +153,12 @@ async function proxyAkwam(request, env, url) {
   const workerOrigin = url.origin;
   const parentParam = url.searchParams.get('__parent') || '';
   const parentOrigin = allowedParents(env).has(parentParam) ? parentParam : '';
-  const seoMode = url.searchParams.get('__seo') === '1' && Boolean(parentOrigin);
+  const seoMode = url.searchParams.get('seo') === '1' && Boolean(parentOrigin);
   const seoCategory = url.pathname.endsWith('/series') ? SEO_CATEGORIES.get(url.searchParams.get('section')) : null;
   const publicOrigin = seoMode ? parentOrigin : '';
   const path = match[2] ? '/' + match[2] : '/';
   const upstreamUrl = new URL(path, 'https://' + upstreamHost);
-  for (const [key,value] of url.searchParams) if (key !== '__parent' && key !== '__seo') upstreamUrl.searchParams.append(key, value);
+  for (const [key,value] of url.searchParams) if (key !== '__parent' && key !== 'seo') upstreamUrl.searchParams.append(key, value);
 
   const headers = new Headers(request.headers);
   for (const name of ['host','content-length','accept-encoding','origin','referer','cf-connecting-ip','cf-ray','x-forwarded-host','x-forwarded-proto']) headers.delete(name);
@@ -275,7 +275,7 @@ function seoCanonicalUrl(url, lang, parentOrigin, category) {
     if (Number.isSafeInteger(page) && page > 1) target.searchParams.set('page', String(page));
   } else {
     for (const [key,value] of url.searchParams) {
-      if (!['__parent','__seo','__theme'].includes(key)) target.searchParams.append(key, value);
+      if (!['__parent','__seo','seo','__theme'].includes(key)) target.searchParams.append(key, value);
     }
   }
   return target.href;
