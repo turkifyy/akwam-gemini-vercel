@@ -4,20 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#090c0a">
-<meta name="description" content="Turkify Series منصة لاستكشاف المسلسلات التركية والهندية والكورية والعالمية بواجهة متعددة اللغات وترجمة ذكية. اختر القسم وابدأ التصفح بسهولة.">
+<meta name="description" content="استكشف المسلسلات التركية والهندية والكورية والعالمية، واختر تصنيفك لعرض قائمة المسلسلات مع واجهة عربية وترجمة متعددة اللغات.">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
 <meta name="application-name" content="Turkify Series">
 <link rel="canonical" href="https://akwam-gemini-vercel.vercel.app/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Turkify Series">
-<meta property="og:title" content="Turkify Series | مسلسلات تركية وهندية وكورية">
-<meta property="og:description" content="استكشف المسلسلات التركية والهندية والكورية والعالمية بواجهة متعددة اللغات وترجمة ذكية.">
+<meta property="og:title" content="Turkify Series | مسلسلات مترجمة بلغتك">
+<meta property="og:description" content="استكشف المسلسلات التركية والهندية والكورية والعالمية، واختر تصنيفك لعرض قائمة المسلسلات مع واجهة عربية وترجمة متعددة اللغات.">
 <meta property="og:url" content="https://akwam-gemini-vercel.vercel.app/">
 <meta property="og:locale" content="ar_AR">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Turkify Series | مسلسلات بترجمة ذكية">
-<meta name="twitter:description" content="استكشف المسلسلات التركية والهندية والكورية والعالمية بواجهة متعددة اللغات وترجمة ذكية.">
+<meta name="twitter:title" content="Turkify Series | مسلسلات مترجمة بلغتك">
+<meta name="twitter:description" content="استكشف المسلسلات التركية والهندية والكورية والعالمية، واختر تصنيفك لعرض قائمة المسلسلات مع واجهة عربية وترجمة متعددة اللغات.">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -44,7 +44,7 @@
   ]
 }
 </script>
-<title>Turkify Series | مسلسلات تركية وهندية وكورية</title>
+<title>Turkify Series | مسلسلات مترجمة بلغتك</title>
 <link rel="stylesheet" href="/style.css">
 <script src="/config.js"></script>
 </head>
@@ -63,24 +63,29 @@
     </div>
   </section>
 
-  <div class="frame-stage" id="frame-stage" hidden>
+  <header class="site-intro" lang="ar" dir="rtl">
+    <h1 id="page-title">مسلسلات مترجمة بلغتك</h1>
+    <p id="page-description">استكشف المسلسلات التركية والهندية والكورية والعالمية، واختر تصنيفًا لبدء التصفح. تتغير لغة واجهة العرض حسب تفضيلات الزائر.</p>
+  </header>
+
+  <div class="frame-stage" id="frame-stage">
     <nav class="category-nav" aria-label="تصنيفات المسلسلات">
-      <button class="category-tab is-active" type="button" data-category="turkish" aria-pressed="true">
+      <a class="category-tab is-active" href="/?category=turkish" data-category="turkish" aria-current="page">
         <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.6 3.2a8.9 8.9 0 1 0 6.1 13.4 8 8 0 0 1-6.1-13.4Z" fill="currentColor" stroke="none"/><path d="m17.8 6.2.8 1.7 1.9.2-1.4 1.3.4 1.9-1.7-1-1.7 1 .4-1.9-1.4-1.3 1.9-.2.8-1.7Z" fill="currentColor" stroke="none"/></svg>
         <span>تركي</span>
-      </button>
-      <button class="category-tab" type="button" data-category="indian" aria-pressed="false">
+      </a>
+      <a class="category-tab" href="/?category=indian" data-category="indian" aria-current="false">
         <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h16v11H4zM4 8.5l2.2-4h16l-2.2 4M8 4.5l2 4m3-4 2 4m3-4 2 4M8 12v4m4-4v4m4-4v4"/></svg>
         <span>هندي</span>
-      </button>
-      <button class="category-tab" type="button" data-category="korean" aria-pressed="false">
+      </a>
+      <a class="category-tab" href="/?category=korean" data-category="korean" aria-current="false">
         <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a4.5 4.5 0 0 1 0 9 4.5 4.5 0 0 0 0 9"/><circle cx="12" cy="7.5" r=".8" fill="currentColor" stroke="none"/><circle cx="12" cy="16.5" r=".8" fill="currentColor" stroke="none"/></svg>
         <span>كوري</span>
-      </button>
-      <button class="category-tab" type="button" data-category="foreign" aria-pressed="false">
+      </a>
+      <a class="category-tab" href="/?category=foreign" data-category="foreign" aria-current="false">
         <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18M5.6 6.5h12.8M5.6 17.5h12.8"/></svg>
         <span>أجنبي</span>
-      </button>
+      </a>
     </nav>
     <iframe
       id="site-frame"
@@ -108,7 +113,15 @@
     korean: {section:'33',language:'12'},
     foreign: {section:'30'}
   };
-  let currentCategory = 'turkish';
+  const defaultSeo = {title:'Turkify Series | مسلسلات مترجمة بلغتك',heading:'مسلسلات مترجمة بلغتك',description:'استكشف المسلسلات التركية والهندية والكورية والعالمية، واختر تصنيفًا لبدء التصفح. تتغير لغة واجهة العرض حسب تفضيلات الزائر.'};
+  const categorySeo = {
+    turkish:{title:'مسلسلات تركية مترجمة | Turkify Series',heading:'مسلسلات تركية مترجمة',description:'تصفّح تصنيف المسلسلات التركية واستكشف العناوين التي يعرضها الموقع، مع واجهة متعددة اللغات وترجمة نصوص الصفحة.'},
+    indian:{title:'مسلسلات هندية مترجمة | Turkify Series',heading:'مسلسلات هندية مترجمة',description:'تصفّح تصنيف المسلسلات الهندية واستكشف العناوين التي يعرضها الموقع، مع واجهة متعددة اللغات وترجمة نصوص الصفحة.'},
+    korean:{title:'مسلسلات كورية مترجمة | Turkify Series',heading:'مسلسلات كورية مترجمة',description:'تصفّح تصنيف المسلسلات الكورية واستكشف العناوين التي يعرضها الموقع، مع واجهة متعددة اللغات وترجمة نصوص الصفحة.'},
+    foreign:{title:'مسلسلات عالمية مترجمة | Turkify Series',heading:'مسلسلات عالمية مترجمة',description:'تصفّح تصنيف المسلسلات الأجنبية والعالمية واستكشف العناوين التي يعرضها الموقع، مع واجهة متعددة اللغات وترجمة نصوص الصفحة.'}
+  };
+  let currentCategory = new URLSearchParams(location.search).get('category') || 'turkish';
+  if (!Object.hasOwn(categoryFilters, currentCategory)) currentCategory = 'turkish';
   let workerOrigin = '';
   let currentLang = 'en';
   let currentTheme = '';
@@ -211,6 +224,44 @@
     });
   }
 
+  function setActiveCategory(category) {
+    document.querySelectorAll('.category-tab').forEach(tab => {
+      const active = tab.dataset.category === category;
+      tab.classList.toggle('is-active', active);
+      tab.setAttribute('aria-current', active ? 'page' : 'false');
+    });
+  }
+
+  function updateCategorySeo(category) {
+    const hasCategory = new URLSearchParams(location.search).has('category');
+    const seo = hasCategory ? categorySeo[category] : defaultSeo;
+    document.title = seo.title;
+    const heading = document.querySelector('#page-title');
+    const description = document.querySelector('#page-description');
+    if (heading) heading.textContent = seo.heading;
+    if (description) description.textContent = seo.description;
+    const descriptionTag = document.querySelector('meta[name="description"]');
+    const canonical = document.querySelector('link[rel="canonical"]');
+    const socialTitle = document.querySelector('meta[property="og:title"]');
+    const socialDescription = document.querySelector('meta[property="og:description"]');
+    const socialUrl = document.querySelector('meta[property="og:url"]');
+    const twitterTitle = document.querySelector('meta[name="twitter:title"]');
+    const twitterDescription = document.querySelector('meta[name="twitter:description"]');
+    if (descriptionTag) descriptionTag.content = seo.description;
+    if (canonical) canonical.href = new URL(hasCategory ? '/?category=' + category : '/', location.origin).href;
+    if (socialTitle) socialTitle.content = seo.title;
+    if (socialDescription) socialDescription.content = seo.description;
+    if (socialUrl) socialUrl.content = new URL(hasCategory ? '/?category=' + category : '/', location.origin).href;
+    if (twitterTitle) twitterTitle.content = seo.title;
+    if (twitterDescription) twitterDescription.content = seo.description;
+  }
+
+  function updateCategoryUrl(category) {
+    const nextUrl = new URL(location.href || '/', location.origin);
+    nextUrl.searchParams.set('category', category);
+    window.history?.pushState({category}, '', nextUrl.href);
+  }
+
   function showSetup(message) {
     setup.hidden = false;
     frameStage.hidden = true;
@@ -259,21 +310,31 @@
   }
 
   document.querySelectorAll('.category-tab').forEach(button => {
-    button.addEventListener('click', () => {
+    button.addEventListener('click', event => {
+      event?.preventDefault?.();
       const category = button.dataset.category;
-      if (!categoryFilters[category]) return;
+      if (!Object.hasOwn(categoryFilters, category)) return;
       if (category === currentCategory) {
-        if (currentFrameKind === "detail") openLanguage(currentLang);
+        if (!new URLSearchParams(location.search).has('category')) {
+          updateCategoryUrl(category);
+          updateCategorySeo(category);
+        }
+        if (currentFrameKind === 'detail') openLanguage(currentLang);
         return;
       }
       currentCategory = category;
-      document.querySelectorAll('.category-tab').forEach(tab => {
-        const active = tab === button;
-        tab.classList.toggle('is-active', active);
-        tab.setAttribute('aria-pressed', String(active));
-      });
+      setActiveCategory(category);
+      updateCategoryUrl(category);
+      updateCategorySeo(category);
       openLanguage(currentLang);
     });
+  });
+  window.addEventListener('popstate', () => {
+    const requested = new URLSearchParams(location.search).get('category');
+    currentCategory = Object.hasOwn(categoryFilters, requested) ? requested : 'turkish';
+    setActiveCategory(currentCategory);
+    updateCategorySeo(currentCategory);
+    openLanguage(currentLang);
   });
 
   async function start() {
@@ -339,6 +400,8 @@
     frame.contentWindow.postMessage({source:'akwam-gemini-bridge',type:'frame-state-request'},workerOrigin);
     frame.contentWindow.postMessage({source:'akwam-gemini-bridge',type:'theme-change',theme:currentTheme},workerOrigin);
   });
+  setActiveCategory(currentCategory);
+  updateCategorySeo(currentCategory);
   updateTheme();
   setInterval(updateTheme, 60000);
   window.addEventListener('focus', updateTheme);

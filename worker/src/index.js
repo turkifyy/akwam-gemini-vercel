@@ -46,6 +46,7 @@ function handleOptions(request, env) {
 }
 
 function handleHealth(request, env) {
+  if (request.method !== 'GET') return json({error:'Use GET'}, 405);
   const origin = request.headers.get('Origin') || '';
   if (!allowedParents(env).has(origin)) return json({error:'Origin not allowed'}, 403);
   const headers = corsHeaders(origin, env);

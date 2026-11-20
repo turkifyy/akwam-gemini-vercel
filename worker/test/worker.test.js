@@ -197,6 +197,10 @@ test('health only answers the configured Vercel origin', async () => {
   assert.equal(allowed.headers.get('Access-Control-Allow-Origin'), 'https://series.example.vercel.app');
   assert.deepEqual(await allowed.json(), {ok:true,geminiConfigured:true,model:'gemini-3.5-flash-lite'});
 
+  const wrongMethod = await worker.fetch(new Request(workerUrl + '/health', {method:'POST',headers:{Origin:'https://series.example.vercel.app'}}), env);
+  assert.equal(wrongMethod.status, 405);
+  assert.deepEqual(await wrongMethod.json(), {error:'Use GET'});
+
   const denied = await worker.fetch(new Request(workerUrl + '/health', {headers:{Origin:'https://attacker.example'}}), env);
   assert.equal(denied.status, 403);
 });
