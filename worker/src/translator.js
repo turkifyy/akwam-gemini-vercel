@@ -213,7 +213,7 @@ export const translatorScript = String.raw`(() => {
       return top + element.offsetHeight;
     };
     const skipHeight = archive ? 524 : Math.min(600, Math.max(0, ...[header,bar].filter(Boolean).map(bottom)));
-    report('frame-state', {kind:archive ? 'archive' : 'detail', skipHeight});
+    report('frame-state', {kind:archive ? 'archive' : 'detail', skipHeight, href:location.href});
   }
 
   function autoPaginate() {

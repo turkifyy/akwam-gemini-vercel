@@ -114,6 +114,7 @@
   let currentTheme = '';
   let skipHeight = 524;
   let currentFrameKind = "archive";
+  let currentFrameUrl = '';
   let translationRetryCount = 0;
   let translationRetryTimer = 0;
   let languageRevision = 0;
@@ -248,12 +249,13 @@
     }
     currentLang = lang;
     root.style.setProperty('--skip-height', skipHeight + 'px');
-    if (retry && frame.src) {
-      frame.src = frame.src;
+    if (retry && currentFrameUrl) {
+      frame.src = currentFrameUrl;
       return;
     }
     currentFrameKind = 'archive';
-    frame.src = frameUrl(lang);
+    currentFrameUrl = frameUrl(lang);
+    frame.src = currentFrameUrl;
   }
 
   document.querySelectorAll('.category-tab').forEach(button => {
@@ -303,6 +305,10 @@
     if (data?.source !== 'akwam-gemini-bridge') return;
     if (data.type === 'frame-state' && ['archive','detail'].includes(data.kind)) {
       currentFrameKind = data.kind;
+      try {
+        const pageUrl = new URL(data.href);
+        if (pageUrl.origin === workerOrigin && pageUrl.pathname.startsWith('/site/')) currentFrameUrl = pageUrl.href;
+      } catch (_) {}
       const height = Number(data.skipHeight);
       if (Number.isFinite(height) && height >= 0 && height <= 600) {
         skipHeight = Math.ceil(height);

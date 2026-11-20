@@ -278,7 +278,7 @@ test('retry preserves the detail page and the active category returns to its lis
     source:harness.frame.contentWindow,
     data:Object.assign({source:'akwam-gemini-bridge'}, data)
   });
-  send({type:'frame-state',kind:'detail',skipHeight:120});
+  send({type:'frame-state',kind:'detail',skipHeight:120,href:detail});
   send({type:'translation-error',retryable:true,message:'Temporary failure'});
   const retry = [...harness.timers.values()].find(timer => timer.delay === 1500);
   assert.ok(retry);
