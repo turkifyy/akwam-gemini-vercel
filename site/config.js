@@ -1,1 +1,1 @@
-window.AKWAM_WORKER_URL = "https://akwam-gemini-bridge.osamalovirboy.workers.dev";
+window.AKWAM_WORKER_URL = "https://turkifyseries.osamalovirboy.workers.dev";
