@@ -19,7 +19,7 @@
 ## حالة النشر والتحقق
 
 - الواجهة المنشورة: `https://turkifyseries.vercel.app`.
-- إصدار Vercel الإنتاجي الحالي: `https://turkifyseries.vercel.app` (نُشر في 19 نوفمبر 2026).
+- النطاق الأساسي للإنتاج: `https://turkifyseries.vercel.app` (تم تحديثه في 21 نوفمبر 2026).
 - نُشر شريط أقسام تركي وهندي وكوري وأجنبي إلى المشروع الإنتاجي `akwam-gemini-vercel`، مع الإبقاء على Cloudflare Worker الحالي.
 - Cloudflare Worker المنشور: `https://akwam-gemini-bridge.osamalovirboy.workers.dev`.
 - إصدار Worker النشط: `f33b624b`.
