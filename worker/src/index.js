@@ -201,8 +201,8 @@ async function proxyAkwam(request, env, url) {
         let source;
         try { source = new URL(element.getAttribute('src'), upstreamUrl); }
         catch (_) { return; }
-        // This ad script injects a transparent, viewport-wide click layer.
-        if (source.hostname === 'e.dtscout.com') element.remove();
+        // These ad scripts inject a transparent, viewport-wide click layer.
+        if (source.hostname === 'e.dtscout.com' || source.hostname === 'aarems.org') element.remove();
       }})
       .on('[href]', {element:element => rewriteAttribute(element,'href',upstreamUrl,workerOrigin,lang,parentOrigin,publicOrigin)})
       .on('[src]', {element:element => rewriteAttribute(element,'src',upstreamUrl,workerOrigin,lang,parentOrigin,publicOrigin)})

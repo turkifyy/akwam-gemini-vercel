@@ -645,13 +645,15 @@ test('site proxy stays on the configured upstream and permits only the configure
   assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'self' https:\/\/series\.example\.vercel\.app/);
   assert.equal(response.headers.get('x-frame-options'), null);
 
-  const adScript = {
-    attributes:{src:'https://e.dtscout.com/e/?v=1a'},
-    getAttribute(name) { return this.attributes[name] ?? null; },
-    remove() { this.removed = true; }
-  };
-  handlers.get('script[src]').element(adScript);
-  assert.equal(adScript.removed, true);
+  for (const src of ['https://e.dtscout.com/e/?v=1a','https://aarems.org/20']) {
+    const adScript = {
+      attributes:{src},
+      getAttribute(name) { return this.attributes[name] ?? null; },
+      remove() { this.removed = true; }
+    };
+    handlers.get('script[src]').element(adScript);
+    assert.equal(adScript.removed, true);
+  }
 
   const siteScript = {
     attributes:{src:'https://akwam.ss/style/assets/js/akwam.js'},
