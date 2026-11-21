@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://akwam-gemini-vercel.vercel.app/</loc>
+    <loc>https://turkifyseries.vercel.app/</loc>
     <lastmod>2026-11-20</lastmod>
   </url>
   <url>
-    <loc>https://akwam-gemini-vercel.vercel.app/catalog/turkish</loc>
+    <loc>https://turkifyseries.vercel.app/catalog/turkish</loc>
     <lastmod>2026-11-20</lastmod>
   </url>
   <url>
-    <loc>https://akwam-gemini-vercel.vercel.app/catalog/indian</loc>
+    <loc>https://turkifyseries.vercel.app/catalog/indian</loc>
     <lastmod>2026-11-20</lastmod>
   </url>
   <url>
-    <loc>https://akwam-gemini-vercel.vercel.app/catalog/korean</loc>
+    <loc>https://turkifyseries.vercel.app/catalog/korean</loc>
     <lastmod>2026-11-20</lastmod>
   </url>
   <url>
-    <loc>https://akwam-gemini-vercel.vercel.app/catalog/foreign</loc>
+    <loc>https://turkifyseries.vercel.app/catalog/foreign</loc>
     <lastmod>2026-11-20</lastmod>
   </url>
 </urlset>
