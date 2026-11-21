@@ -210,6 +210,84 @@ const bootstrapScript = String.raw`(() => {
       resolveNextEpisode();
     }
 
+    const immersiveStyle = document.createElement('style');
+    immersiveStyle.textContent = '.akwam-immersive-page{overflow:hidden!important;background:#000!important}' +
+      '.akwam-immersive-player{position:fixed!important;inset:0!important;z-index:2147483647!important;width:100vw!important;height:100vh!important;height:100dvh!important;max-width:none!important;max-height:none!important;margin:0!important;background:#000!important;box-sizing:border-box!important}' +
+      '.akwam-immersive-player .plyr__video-wrapper{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;padding:0!important;aspect-ratio:auto!important;border-radius:0!important;background:#000!important}' +
+      '.akwam-immersive-player .plyr__video-wrapper video{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;aspect-ratio:auto!important;object-fit:contain!important}' +
+      '.akwam-immersive-player button[data-plyr="fullscreen"] .icon--not-pressed,.akwam-immersive-player button[data-plyr="fullscreen"] .label--not-pressed{display:none!important}' +
+      '.akwam-immersive-player button[data-plyr="fullscreen"] .icon--pressed,.akwam-immersive-player button[data-plyr="fullscreen"] .label--pressed{display:block!important}';
+    (document.head || document.documentElement).appendChild(immersiveStyle);
+
+    function immersiveDismissKey() {
+      const seriesLink = document.querySelector('a[href*="/series/"]');
+      if (!seriesLink) return '';
+      try {
+        const seriesId = new URL(seriesLink.href, location.href).pathname.match(/\/series\/(\d+)(?:\/|$)/)?.[1];
+        return seriesId ? 'akwam-immersive-dismissed-v1:' + seriesId : '';
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function immersiveDismissed() {
+      const key = immersiveDismissKey();
+      if (!key) return false;
+      try { return sessionStorage.getItem(key) === '1'; }
+      catch (_) { return false; }
+    }
+
+    function setImmersive(player, active, manual=false) {
+      player.classList.toggle('akwam-immersive-player', active);
+      document.documentElement.classList.toggle('akwam-immersive-page', active);
+      const button = player.querySelector('button[data-plyr="fullscreen"]');
+      if (button) button.setAttribute('aria-pressed', String(active));
+
+      const key = immersiveDismissKey();
+      if (manual && key) {
+        try {
+          if (active) sessionStorage.removeItem(key);
+          else sessionStorage.setItem(key, '1');
+        } catch (_) {}
+      }
+    }
+
+    function currentEpisodeNumber() {
+      const episodeLink = document.querySelector('h2 a[href*="/episode/"], .breadcrumb a[href*="/episode/"], a[href*="/episode/"]');
+      const labelNumber = String(episodeLink?.innerText || '').match(/\d+/g)?.at(-1);
+      if (labelNumber) return Number(labelNumber);
+
+      let path = location.pathname;
+      try { path = decodeURIComponent(path); }
+      catch (_) {}
+      return Number(path.match(/(?:episode|الحلقة)[\s_-]*(\d+)(?:\/|$)/i)?.[1] || 0);
+    }
+
+    function enableImmersiveForEpisode(video) {
+      if (currentEpisodeNumber() < 2 || immersiveDismissed()) return;
+      const player = video.closest('.plyr');
+      if (player) setImmersive(player, true);
+    }
+
+    document.addEventListener('click', event => {
+      const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
+      const button = target?.closest?.('button[data-plyr="fullscreen"]');
+      const player = button?.closest?.('.plyr');
+      if (!player) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setImmersive(player, !player.classList.contains('akwam-immersive-player'), true);
+    }, true);
+
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return;
+      const player = document.querySelector('.plyr.akwam-immersive-player');
+      if (!player) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setImmersive(player, false, true);
+    }, true);
+
     function skipEpisodeIntro(video) {
       if (video.readyState < 1) return;
       const duration = video.duration;
@@ -249,9 +327,11 @@ const bootstrapScript = String.raw`(() => {
       video.addEventListener("loadedmetadata", () => {
         skipEpisodeIntro(video);
         autoplayEpisode(video);
+        enableImmersiveForEpisode(video);
       });
       skipEpisodeIntro(video);
       autoplayEpisode(video);
+      enableImmersiveForEpisode(video);
     }
 
     function watchVideos(root) {
