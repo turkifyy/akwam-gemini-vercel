@@ -2,6 +2,7 @@ import {bootstrapScript} from './bootstrap.js';
 import {translatorScript} from './translator.js';
 
 const DEFAULT_UPSTREAM = 'akwam.ss';
+const BLOCKED_AD_SCRIPT_HOSTS = new Set(['aarems.org','mamshirt.com']);
 const ALLOWED_LANGUAGES = new Set(['ar','en','tr','fr','de','es','it','pt','ru','fa','ur','hi','id','ja','ko','zh-CN']);
 const SEO_CATEGORIES = new Map([
   ['30',{slug:'foreign',title:'مسلسلات عالمية مترجمة | Turkify Series',heading:'مسلسلات عالمية',description:'تصفح تصنيف المسلسلات العالمية المترجمة، واكتشف العناوين والتقييمات وتفاصيل الحلقات على Turkify Series.'}],
@@ -198,7 +199,18 @@ async function proxyAkwam(request, env, url) {
       '<script src="' + workerOrigin + '/__bridge/bootstrap.js"></script>';
     const rewriter = new HTMLRewriter()
       .on('[href]', {element:element => rewriteAttribute(element,'href',upstreamUrl,workerOrigin,lang,parentOrigin,publicOrigin)})
-      .on('[src]', {element:element => rewriteAttribute(element,'src',upstreamUrl,workerOrigin,lang,parentOrigin,publicOrigin)})
+      .on('[src]', {element(element) {
+        const source = element.getAttribute('src');
+        if (element.tagName.toLowerCase() === 'script' && source) {
+          try {
+            if (BLOCKED_AD_SCRIPT_HOSTS.has(new URL(source,upstreamUrl).hostname)) {
+              element.remove();
+              return;
+            }
+          } catch (_) {}
+        }
+        rewriteAttribute(element,'src',upstreamUrl,workerOrigin,lang,parentOrigin,publicOrigin);
+      }})
       .on('[action]', {element:element => rewriteAttribute(element,'action',upstreamUrl,workerOrigin,lang,parentOrigin,publicOrigin)})
       .on('[srcset]', {element:element => rewriteSrcset(element,upstreamUrl,workerOrigin,lang,parentOrigin,publicOrigin)})
       .on('meta[http-equiv]', {element(element) {
