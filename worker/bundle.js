@@ -97,29 +97,22 @@ const bootstrapScript = String.raw`(() => {
   }
   if (/\/watch\/\d+\/\d+(?:\/|$)/.test(location.pathname)) {
     const attachedVideos = new WeakSet();
-    const skippedSources = new WeakMap();
 
     function skipEpisodeIntro(video) {
-      const source = video.currentSrc || video.src;
-      if (!source || video.readyState < 1 || skippedSources.get(video) === source) return;
+      if (video.readyState < 1) return;
       const duration = video.duration;
-      if (!Number.isFinite(duration) || duration <= 60) return;
-      if (video.currentTime >= 60) {
-        skippedSources.set(video, source);
-        return;
-      }
+      if (!Number.isFinite(duration) || duration <= 60 || video.currentTime >= 60) return;
       try {
         video.currentTime = 60;
-        skippedSources.set(video, source);
       } catch (_) {}
     }
 
     function watchVideo(video) {
       if (video.tagName !== "VIDEO" || attachedVideos.has(video)) return;
       attachedVideos.add(video);
-      video.addEventListener("loadedmetadata", () => skipEpisodeIntro(video));
-      video.addEventListener("durationchange", () => skipEpisodeIntro(video));
-      video.addEventListener("play", () => skipEpisodeIntro(video));
+      for (const eventName of ["loadedmetadata","durationchange","seeked","play","playing"]) {
+        video.addEventListener(eventName, () => skipEpisodeIntro(video));
+      }
       skipEpisodeIntro(video);
     }
 

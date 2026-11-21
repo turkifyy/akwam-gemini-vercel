@@ -89,10 +89,13 @@ test("videos inserted after page load are handled", () => {
   assert.equal(video.currentTime, 60);
 });
 
-test("manual rewinds are not skipped a second time", () => {
+test("player resets to the intro are corrected before playback", () => {
   const video = makeVideo();
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
   video.currentTime = 0;
+  video.emit("seeked");
+  assert.equal(video.currentTime, 60);
+  video.currentTime = 0;
   video.emit("play");
-  assert.equal(video.currentTime, 0);
+  assert.equal(video.currentTime, 60);
 });
