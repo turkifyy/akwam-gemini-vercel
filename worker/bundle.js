@@ -95,6 +95,79 @@ const bootstrapScript = String.raw`(() => {
       }
     }
   }
+
+  function installWatchProgress() {
+    const episodePath = location.pathname.slice(routePath.length) || '/';
+    const episodePage = /^\/episode\/\d+(?:\/|$)/.test(episodePath);
+    const watchPage = /^\/watch\/\d+\/\d+(?:\/|$)/.test(episodePath);
+    const seriesLink = document.querySelector('.breadcrumb a[href*="/series/"], h1 a[href*="/series/"], a[href*="/series/"]');
+    const seriesId = seriesLink && new URL(seriesLink.href, location.href).pathname.match(/\/series\/(\d+)(?:\/|$)/)?.[1];
+
+    if ((episodePage || watchPage) && seriesId) {
+      const episodeLink = episodePage
+        ? null
+        : document.querySelector('.breadcrumb a[href*="/episode/"], h2 a[href*="/episode/"], a[href*="/episode/"]');
+      const episodeUrl = new URL(episodeLink?.href || location.href, location.href);
+      const episodeRoute = episodeUrl.pathname.match(/^\/(?:site|catalog)\/[^/]+(\/episode\/\d+(?:\/.*)?)$/);
+      if (episodeRoute) {
+        try { localStorage.setItem('akwam-watch-progress-v1:' + seriesId, episodeRoute[1]); }
+        catch (_) {}
+      }
+    }
+
+    document.addEventListener('click', event => {
+      const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
+      const link = target?.closest?.('a[href]');
+      if (!link) return;
+
+      let destination;
+      try { destination = new URL(link.href, location.href); }
+      catch (_) { return; }
+      const targetSeriesId = destination.pathname.match(/\/series\/(\d+)(?:\/|$)/)?.[1];
+      if (!targetSeriesId || destination.hash !== '#series-episodes') return;
+
+      const progressKey = 'akwam-watch-progress-v1:' + targetSeriesId;
+      let savedPath = '';
+      try { savedPath = localStorage.getItem(progressKey) || ''; }
+      catch (_) {}
+
+      if (/^\/episode\/\d+(?:\/|$)/.test(savedPath)) {
+        event.preventDefault();
+        const resumeUrl = new URL(routePath + savedPath, location.origin);
+        if (parentOrigin && !seoMode) resumeUrl.searchParams.set('__parent', parentOrigin);
+        location.assign(resumeUrl.href);
+        return;
+      }
+
+      const episodes = document.querySelector('#series-episodes') || document;
+      const links = [...episodes.querySelectorAll('a[href*="/episode/"]')]
+        .map(anchor => {
+          try {
+            const url = new URL(anchor.href, location.href);
+            const segment = decodeURIComponent(url.pathname.split('/').filter(Boolean).at(-1) || '');
+            const number = Number(segment.match(/\d+(?!.*\d)/)?.[0]);
+            return {url, number};
+          } catch (_) {
+            return null;
+          }
+        })
+        .filter(item => item && item.url.origin === location.origin &&
+          item.url.pathname.includes('/episode/'));
+      const firstEpisode = links.filter(item => Number.isFinite(item.number))
+        .sort((a, b) => a.number - b.number)[0]?.url || links.at(-1)?.url;
+      if (firstEpisode) {
+        event.preventDefault();
+        location.assign(proxyUrl(firstEpisode.href));
+      }
+    }, true);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installWatchProgress, {once:true});
+  } else {
+    installWatchProgress();
+  }
+
   if (/\/watch\/\d+\/\d+(?:\/|$)/.test(location.pathname)) {
     const attachedVideos = new WeakSet();
     const autoplayAttempted = new WeakSet();
