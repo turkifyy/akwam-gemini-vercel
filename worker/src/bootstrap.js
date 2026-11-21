@@ -101,9 +101,9 @@ export const bootstrapScript = String.raw`(() => {
     function skipEpisodeIntro(video) {
       if (video.readyState < 1) return;
       const duration = video.duration;
-      if (!Number.isFinite(duration) || duration <= 70 || video.currentTime >= 70) return;
+      if (!Number.isFinite(duration) || duration <= 80 || video.currentTime >= 80) return;
       try {
-        video.currentTime = 70;
+        video.currentTime = 80;
       } catch (_) {}
     }
 

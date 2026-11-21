@@ -49,10 +49,10 @@ function runBootstrap(pathname, videos = []) {
   return observers;
 }
 
-test("episode playback skips exactly 70 seconds", () => {
+test("episode playback skips exactly 80 seconds", () => {
   const video = makeVideo();
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
-  assert.equal(video.currentTime, 70);
+  assert.equal(video.currentTime, 80);
 });
 
 test("saved playback positions are preserved", () => {
@@ -61,8 +61,8 @@ test("saved playback positions are preserved", () => {
   assert.equal(video.currentTime, 120);
 });
 
-test("clips up to 70 seconds are not skipped", () => {
-  const video = makeVideo({duration:70});
+test("clips up to 80 seconds are not skipped", () => {
+  const video = makeVideo({duration:80});
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
   assert.equal(video.currentTime, 0);
 });
@@ -79,14 +79,14 @@ test("the skip waits for video metadata", () => {
   assert.equal(video.currentTime, 0);
   video.readyState = 1;
   video.emit("loadedmetadata");
-  assert.equal(video.currentTime, 70);
+  assert.equal(video.currentTime, 80);
 });
 
 test("videos inserted after page load are handled", () => {
   const observers = runBootstrap("/site/en/watch/185231/105666/episode");
   const video = makeVideo();
   observers[0].callback([{addedNodes:[video]}]);
-  assert.equal(video.currentTime, 70);
+  assert.equal(video.currentTime, 80);
 });
 
 test("player resets to the intro are corrected before playback", () => {
@@ -94,8 +94,8 @@ test("player resets to the intro are corrected before playback", () => {
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
   video.currentTime = 0;
   video.emit("seeked");
-  assert.equal(video.currentTime, 70);
+  assert.equal(video.currentTime, 80);
   video.currentTime = 0;
   video.emit("play");
-  assert.equal(video.currentTime, 70);
+  assert.equal(video.currentTime, 80);
 });
