@@ -95,6 +95,46 @@ const bootstrapScript = String.raw`(() => {
       }
     }
   }
+  if (/\/watch\/\d+\/\d+(?:\/|$)/.test(location.pathname)) {
+    const attachedVideos = new WeakSet();
+    const skippedSources = new WeakMap();
+
+    function skipEpisodeIntro(video) {
+      const source = video.currentSrc || video.src;
+      if (!source || video.readyState < 1 || skippedSources.get(video) === source) return;
+      const duration = video.duration;
+      if (!Number.isFinite(duration) || duration <= 60) return;
+      if (video.currentTime >= 60) {
+        skippedSources.set(video, source);
+        return;
+      }
+      try {
+        video.currentTime = 60;
+        skippedSources.set(video, source);
+      } catch (_) {}
+    }
+
+    function watchVideo(video) {
+      if (video.tagName !== "VIDEO" || attachedVideos.has(video)) return;
+      attachedVideos.add(video);
+      video.addEventListener("loadedmetadata", () => skipEpisodeIntro(video));
+      video.addEventListener("durationchange", () => skipEpisodeIntro(video));
+      video.addEventListener("play", () => skipEpisodeIntro(video));
+      skipEpisodeIntro(video);
+    }
+
+    function watchVideos(root) {
+      if (root.nodeType === 1) watchVideo(root);
+      if (root.querySelectorAll) root.querySelectorAll("video").forEach(watchVideo);
+    }
+
+    watchVideos(document.documentElement);
+    new MutationObserver(records => {
+      for (const record of records) {
+        for (const node of record.addedNodes) watchVideos(node);
+      }
+    }).observe(document.documentElement, {subtree:true,childList:true});
+  }
   rewriteAttributes(document.documentElement);
   new MutationObserver(records => {
     for (const record of records) {
