@@ -112,10 +112,19 @@ const bootstrapScript = String.raw`(() => {
     function autoplayEpisode(video) {
       if (video.readyState < 1 || autoplayAttempted.has(video)) return;
       autoplayAttempted.add(video);
+      const playMuted = () => {
+        video.muted = true;
+        try {
+          const playback = video.play();
+          if (playback && typeof playback.catch === "function") playback.catch(() => {});
+        } catch (_) {}
+      };
       try {
         const playback = video.play();
-        if (playback && typeof playback.catch === "function") playback.catch(() => {});
-      } catch (_) {}
+        if (playback && typeof playback.catch === "function") playback.catch(playMuted);
+      } catch (_) {
+        playMuted();
+      }
     }
 
     function watchVideo(video) {

@@ -13,6 +13,7 @@ function makeVideo({duration = 1850, currentTime = 0, readyState = 1, source = "
     duration,
     currentTime,
     readyState,
+    muted:false,
     playCalls:0,
     play() { this.playCalls++; return Promise.resolve(); },
     addEventListener(name, listener) {
@@ -113,8 +114,14 @@ test("player resets to the intro are corrected before playback", () => {
 });
 
 
-test("rejected autoplay promises are handled", () => {
+test("rejected autoplay retries muted", async () => {
   const video = makeVideo();
-  video.play = () => Promise.reject(new Error("Autoplay blocked"));
-  assert.doesNotThrow(() => runBootstrap("/site/en/watch/185231/105666/episode", [video]));
+  video.play = () => {
+    video.playCalls++;
+    return video.playCalls === 1 ? Promise.reject(new Error("Autoplay blocked")) : Promise.resolve();
+  };
+  runBootstrap("/site/en/watch/185231/105666/episode", [video]);
+  await Promise.resolve();
+  assert.equal(video.playCalls, 2);
+  assert.equal(video.muted, true);
 });
