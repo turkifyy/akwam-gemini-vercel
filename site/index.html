@@ -104,6 +104,7 @@
   const frameStage = document.querySelector('#frame-stage');
   const frame = document.querySelector('#site-frame');
   const root = document.documentElement;
+  const canonicalOrigin = 'https://turkifyseries.vercel.app';
   const params = new URLSearchParams('section=32&category=0&rating=0&year=0&language=0&formats=0&quality=0&page=1');
   const categoryFilters = {
     turkish: {section:'32'},
@@ -246,10 +247,10 @@
     const twitterTitle = document.querySelector('meta[name="twitter:title"]');
     const twitterDescription = document.querySelector('meta[name="twitter:description"]');
     if (descriptionTag) descriptionTag.content = seo.description;
-    if (canonical) canonical.href = new URL(hasCategory ? '/?category=' + category : '/', location.origin).href;
+    if (canonical) canonical.href = new URL(hasCategory ? '/?category=' + category : '/', canonicalOrigin).href;
     if (socialTitle) socialTitle.content = seo.title;
     if (socialDescription) socialDescription.content = seo.description;
-    if (socialUrl) socialUrl.content = new URL(hasCategory ? '/?category=' + category : '/', location.origin).href;
+    if (socialUrl) socialUrl.content = new URL(hasCategory ? '/?category=' + category : '/', canonicalOrigin).href;
     if (twitterTitle) twitterTitle.content = seo.title;
     if (twitterDescription) twitterDescription.content = seo.description;
   }
