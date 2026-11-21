@@ -197,7 +197,7 @@ const bootstrapScript = String.raw`(() => {
 
     function advanceEpisode(video, ended=false) {
       if (advancedVideos.has(video)) return;
-      if (!ended && (!Number.isFinite(video.duration) || video.duration <= 15 || video.currentTime < video.duration - 15)) return;
+      if (!ended && (!Number.isFinite(video.duration) || video.duration <= 70 || video.currentTime < video.duration - 70)) return;
       const nextUrl = resolveNextEpisode();
       if (!nextUrl) return;
       advancedVideos.add(video);
