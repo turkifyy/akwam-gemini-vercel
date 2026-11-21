@@ -617,6 +617,7 @@ test('translation accepts only the configured site origin in addition to the Wor
 test('site proxy stays on the configured upstream and permits only the configured frame parent', async t => {
   const originalFetch = globalThis.fetch;
   const originalRewriter = globalThis.HTMLRewriter;
+  const handlers = new Map();
   let upstreamUrl;
   globalThis.fetch = async request => {
     upstreamUrl = String(request.url);
@@ -625,7 +626,7 @@ test('site proxy stays on the configured upstream and permits only the configure
     });
   };
   globalThis.HTMLRewriter = class {
-    on() { return this; }
+    on(selector, handler) { handlers.set(selector, handler); return this; }
     transform(response) { return response; }
   };
   t.after(() => {
@@ -643,6 +644,22 @@ test('site proxy stays on the configured upstream and permits only the configure
   assert.equal(new URL(upstreamUrl).searchParams.get('__parent'), null);
   assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'self' https:\/\/series\.example\.vercel\.app/);
   assert.equal(response.headers.get('x-frame-options'), null);
+
+  const adScript = {
+    attributes:{src:'https://e.dtscout.com/e/?v=1a'},
+    getAttribute(name) { return this.attributes[name] ?? null; },
+    remove() { this.removed = true; }
+  };
+  handlers.get('script[src]').element(adScript);
+  assert.equal(adScript.removed, true);
+
+  const siteScript = {
+    attributes:{src:'https://akwam.ss/style/assets/js/akwam.js'},
+    getAttribute(name) { return this.attributes[name] ?? null; },
+    remove() { this.removed = true; }
+  };
+  handlers.get('script[src]').element(siteScript);
+  assert.equal(siteScript.removed, undefined);
 
   const deniedUrl = new URL(workerUrl + '/site/ar/series');
   deniedUrl.searchParams.set('__parent','https://attacker.example');

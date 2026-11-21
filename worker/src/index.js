@@ -197,6 +197,13 @@ async function proxyAkwam(request, env, url) {
     const inlineConfig = '<script>window.__AKWAM_BRIDGE__=' + JSON.stringify({lang,parentOrigin:bridgeParent,upstreamHost,seoMode}) + ';</script>' +
       '<script src="' + workerOrigin + '/__bridge/bootstrap.js"></script>';
     const rewriter = new HTMLRewriter()
+      .on('script[src]', {element(element) {
+        let source;
+        try { source = new URL(element.getAttribute('src'), upstreamUrl); }
+        catch (_) { return; }
+        // This ad script injects a transparent, viewport-wide click layer.
+        if (source.hostname === 'e.dtscout.com') element.remove();
+      }})
       .on('[href]', {element:element => rewriteAttribute(element,'href',upstreamUrl,workerOrigin,lang,parentOrigin,publicOrigin)})
       .on('[src]', {element:element => rewriteAttribute(element,'src',upstreamUrl,workerOrigin,lang,parentOrigin,publicOrigin)})
       .on('[action]', {element:element => rewriteAttribute(element,'action',upstreamUrl,workerOrigin,lang,parentOrigin,publicOrigin)})
