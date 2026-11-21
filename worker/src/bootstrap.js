@@ -171,6 +171,44 @@ export const bootstrapScript = String.raw`(() => {
   if (/\/watch\/\d+\/\d+(?:\/|$)/.test(location.pathname)) {
     const attachedVideos = new WeakSet();
     const autoplayAttempted = new WeakSet();
+    const advancedVideos = new WeakSet();
+    let nextEpisodeUrl = '';
+    let nextEpisodeResolved = false;
+
+    function resolveNextEpisode() {
+      if (nextEpisodeResolved) return nextEpisodeUrl;
+      if (document.readyState === 'loading') return '';
+
+      nextEpisodeResolved = true;
+      const link = [...document.querySelectorAll('a[href*="/watch/"]')].find(anchor => {
+        const label = String(anchor.innerText || '') + ' ' + String(anchor.getAttribute('aria-label') || '');
+        return anchor.classList?.contains('justify-content-md-end') || /\bnext\b|التالي|التالية/i.test(label);
+      });
+      if (!link) return '';
+
+      try {
+        const url = new URL(link.href, location.href);
+        if (url.origin === location.origin && url.pathname.startsWith(routePath + '/watch/')) {
+          nextEpisodeUrl = url.href;
+        }
+      } catch (_) {}
+      return nextEpisodeUrl;
+    }
+
+    function advanceEpisode(video, ended=false) {
+      if (advancedVideos.has(video)) return;
+      if (!ended && (!Number.isFinite(video.duration) || video.duration <= 15 || video.currentTime < video.duration - 15)) return;
+      const nextUrl = resolveNextEpisode();
+      if (!nextUrl) return;
+      advancedVideos.add(video);
+      location.assign(nextUrl);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', resolveNextEpisode, {once:true});
+    } else {
+      resolveNextEpisode();
+    }
 
     function skipEpisodeIntro(video) {
       if (video.readyState < 1) return;
@@ -206,6 +244,8 @@ export const bootstrapScript = String.raw`(() => {
       for (const eventName of ["durationchange","seeked","play","playing"]) {
         video.addEventListener(eventName, () => skipEpisodeIntro(video));
       }
+      video.addEventListener("timeupdate", () => advanceEpisode(video));
+      video.addEventListener("ended", () => advanceEpisode(video, true));
       video.addEventListener("loadedmetadata", () => {
         skipEpisodeIntro(video);
         autoplayEpisode(video);
