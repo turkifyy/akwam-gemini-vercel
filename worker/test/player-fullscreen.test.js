@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
 import vm from 'node:vm';
 import {bootstrapScript} from '../src/bootstrap.js';
@@ -146,4 +147,42 @@ test('manual toggle can re-enable immersive mode', () => {
   clickFullscreen(page);
   clickFullscreen(page);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+});
+
+test('parent bridge expands the iframe and restores navigation on exit', async () => {
+  const configSource = await readFile(new URL('../../site/config.js', import.meta.url), 'utf8');
+  const documentListeners = new Map();
+  const windowListeners = new Map();
+  const frameStyle = {
+    top:'',height:'',zIndex:'',
+    removeProperty(name) { this[name === 'z-index' ? 'zIndex' : name] = ''; }
+  };
+  const frame = {contentWindow:{},style:frameStyle};
+  const nav = {hidden:false,style:{display:''}};
+  const document = {
+    readyState:'loading',
+    querySelector(selector) { return selector === '#site-frame' ? frame : nav; },
+    addEventListener(name, callback) { documentListeners.set(name, callback); }
+  };
+  const window = {
+    AKWAM_WORKER_URL:'https://turkifyseries.osamalovirboy.workers.dev',
+    addEventListener(name, callback) { windowListeners.set(name, callback); }
+  };
+
+  vm.runInNewContext(configSource, {window,document,location:{href:'https://parent.example/'},URL});
+  documentListeners.get('DOMContentLoaded')();
+  const receiveMessage = windowListeners.get('message');
+  const send = data => receiveMessage({origin:'https://turkifyseries.osamalovirboy.workers.dev',source:frame.contentWindow,data});
+
+  send({source:'akwam-gemini-bridge',type:'player-immersive',active:true});
+  assert.equal(nav.hidden, true);
+  assert.equal(frame.style.top, '0');
+  assert.equal(frame.style.height, '100dvh');
+  assert.equal(frame.style.zIndex, '3');
+
+  send({source:'akwam-gemini-bridge',type:'player-immersive',active:false});
+  assert.equal(nav.hidden, false);
+  assert.equal(frame.style.top, '');
+  assert.equal(frame.style.height, '');
+  assert.equal(frame.style.zIndex, '');
 });
