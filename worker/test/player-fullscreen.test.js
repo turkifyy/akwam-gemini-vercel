@@ -117,10 +117,10 @@ function clickFullscreen(page) {
   page.listeners.get('click').at(-1)(event);
 }
 
-test('episode 1 stays in the normal player layout', () => {
+test('episode 1 starts in the immersive player layout', () => {
   const page = runWatchPage(1);
-  assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
-  assert.equal(page.messages.some(({message}) => message.type === 'player-immersive' && message.active === false), true);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+  assert.equal(page.messages.some(({message}) => message.type === 'player-immersive' && message.active === true), true);
 });
 
 test('episode 2 and later request the immersive player layout', () => {
@@ -131,19 +131,19 @@ test('episode 2 and later request the immersive player layout', () => {
   }
 });
 
-test('manual exit stays dismissed on later episodes of the same series', () => {
+test('manual exit on episode 1 stays dismissed on later episodes of the same series', () => {
   const sessionStorage = createStorage();
-  const episodeTwo = runWatchPage(2, sessionStorage);
-  clickFullscreen(episodeTwo);
-  assert.equal(episodeTwo.player.classList.contains('akwam-immersive-player'), false);
+  const episodeOne = runWatchPage(1, sessionStorage);
+  clickFullscreen(episodeOne);
+  assert.equal(episodeOne.player.classList.contains('akwam-immersive-player'), false);
 
-  const episodeThree = runWatchPage(3, sessionStorage);
-  assert.equal(episodeThree.player.classList.contains('akwam-immersive-player'), false);
-  assert.equal(episodeThree.messages.some(({message}) => message.type === 'player-immersive' && message.active === false), true);
+  const episodeTwo = runWatchPage(2, sessionStorage);
+  assert.equal(episodeTwo.player.classList.contains('akwam-immersive-player'), false);
+  assert.equal(episodeTwo.messages.some(({message}) => message.type === 'player-immersive' && message.active === false), true);
 });
 
 test('manual toggle can re-enable immersive mode', () => {
-  const page = runWatchPage(2);
+  const page = runWatchPage(1);
   clickFullscreen(page);
   clickFullscreen(page);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);

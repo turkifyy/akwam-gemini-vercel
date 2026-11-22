@@ -275,7 +275,7 @@ const bootstrapScript = String.raw`(() => {
     function enableImmersiveForEpisode(video) {
       const player = video.closest('.plyr');
       if (!player) return;
-      setImmersive(player, currentEpisodeNumber() >= 2 && !immersiveDismissed());
+      setImmersive(player, currentEpisodeNumber() >= 1 && !immersiveDismissed());
     }
 
     document.addEventListener('click', event => {
