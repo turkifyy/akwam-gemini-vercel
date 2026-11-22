@@ -168,7 +168,10 @@ export const bootstrapScript = String.raw`(() => {
     installWatchProgress();
   }
 
-  if (/\/watch\/\d+\/\d+(?:\/|$)/.test(location.pathname)) {
+  const watchPage = /\/watch\/\d+\/\d+(?:\/|$)/.test(location.pathname);
+  post('player-page', {watch:watchPage});
+
+  if (watchPage) {
     const attachedVideos = new WeakSet();
     const autoplayAttempted = new WeakSet();
     const advancedVideos = new WeakSet();
@@ -242,6 +245,7 @@ export const bootstrapScript = String.raw`(() => {
       document.documentElement.classList.toggle('akwam-immersive-page', active);
       const button = player.querySelector('button[data-plyr="fullscreen"]');
       if (button) button.setAttribute('aria-pressed', String(active));
+      post('player-immersive', {active});
 
       const key = immersiveDismissKey();
       if (manual && key) {
@@ -264,9 +268,9 @@ export const bootstrapScript = String.raw`(() => {
     }
 
     function enableImmersiveForEpisode(video) {
-      if (currentEpisodeNumber() < 2 || immersiveDismissed()) return;
       const player = video.closest('.plyr');
-      if (player) setImmersive(player, true);
+      if (!player) return;
+      setImmersive(player, currentEpisodeNumber() >= 2 && !immersiveDismissed());
     }
 
     document.addEventListener('click', event => {
