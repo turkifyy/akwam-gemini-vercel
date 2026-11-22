@@ -532,9 +532,6 @@
   setInterval(updateTheme, 60000);
   window.addEventListener('focus', updateTheme);
   window.addEventListener('focus', () => refreshEpisodeNotifications());
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') refreshEpisodeNotifications();
-  });
   setInterval(() => refreshEpisodeNotifications(), notificationPollInterval);
   start();
 })();
