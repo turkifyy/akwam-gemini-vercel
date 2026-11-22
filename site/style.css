@@ -46,8 +46,11 @@ html, body, .app { position: fixed; inset: 0; width: 100%; height: 100%; margin:
 .category-tab.is-active { color: var(--accent); background: var(--nav-active); }
 .category-tab::after { position: absolute; right: 24px; bottom: 2px; left: 24px; height: 2px; border-radius: 3px; background: var(--accent); content: ""; opacity: 0; transform: scaleX(.55); transition: opacity .18s ease, transform .18s ease; }
 .category-tab.is-active::after { opacity: 1; transform: scaleX(1); }
-.tab-icon { width: 22px; height: 22px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.65; }
-.category-tab span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.tab-icon-wrap { position: relative; display: grid; width: 22px; height: 22px; flex: 0 0 auto; place-items: center; }
+.tab-icon { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.65; }
+.notification-badge { position: absolute; top: -5px; right: -8px; z-index: 1; display: inline-flex; min-width: 16px; height: 16px; align-items: center; justify-content: center; padding: 0 3px; border: 2px solid var(--nav-bg); border-radius: 999px; color: #fff; background: #e41e3f; box-shadow: 0 1px 4px #0006; font-size: 10px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; direction: ltr; }
+.notification-badge[hidden] { display: none; }
+.category-tab .category-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .setup { position: fixed; z-index: 4; inset: 0; display: grid; place-items: center; overflow: auto; padding: 24px; background: radial-gradient(ellipse at 50% 5%, #283b25 0, #090c0a 44rem); }
 .setup-card { width: min(100%, 500px); padding: clamp(24px, 6vw, 42px); border: 1px solid #ffffff18; border-radius: 22px; background: linear-gradient(145deg, #20271f, #151a15); box-shadow: 0 24px 70px #0006; }
 .setup-icon { display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid #d5f2873b; border-radius: 14px; color: var(--accent); background: #d5f28712; font-size: 21px; }
@@ -62,7 +65,8 @@ html, body, .app { position: fixed; inset: 0; width: 100%; height: 100%; margin:
   .site-intro h1 { font-size: 18px; }
   .site-intro p { font-size: 11px; }
   .category-tab { height: 64px; gap: 3px; padding: 4px 2px; border-radius: 12px; font-size: 11px; }
-  .tab-icon { width: 20px; height: 20px; }
+  .tab-icon-wrap { width: 20px; height: 20px; }
+  .notification-badge { right: -7px; }
   .category-tab::after { right: 14px; left: 14px; }
   .category-tab span { min-width: 0; }
 }

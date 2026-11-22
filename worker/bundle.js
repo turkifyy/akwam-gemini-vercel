@@ -896,6 +896,8 @@ const MAX_ITEMS = 20;
 const MAX_ITEM_CHARS = 700;
 const MAX_BATCH_CHARS = 9000;
 const MAX_BODY_BYTES = 32768;
+const EPISODE_CATEGORIES = [['turkish','32'],['indian','31'],['korean','33'],['foreign','30']];
+let episodeUpdatesCache = null;
 
 const worker = {
   async fetch(request, env) {
@@ -903,6 +905,7 @@ const worker = {
     if (request.method === 'OPTIONS') return handleOptions(request, env);
     if (url.pathname === '/health') return handleHealth(request, env);
     if (url.pathname === '/api/visitor') return handleVisitor(request, env);
+    if (url.pathname === '/api/episode-updates') return handleEpisodeUpdates(request, env);
     if (url.pathname === '/api/translate') return handleTranslate(request, env);
     if (url.pathname === '/__bridge/bootstrap.js') return javascript(bootstrapScript);
     if (url.pathname === '/__bridge/translator.js') return javascript(translatorScript);
@@ -959,6 +962,76 @@ async function handleVisitor(request, env) {
   const headers = corsHeaders(origin, env);
   headers.set('Cache-Control','no-store');
   return json({country,source}, 200, headers);
+}
+
+async function handleEpisodeUpdates(request, env) {
+  if (request.method !== 'GET') return json({error:'Use GET'}, 405);
+  const origin = request.headers.get('Origin') || '';
+  if (!allowedParents(env).has(origin)) return json({error:'Origin not allowed'}, 403);
+  const headers = corsHeaders(origin, env);
+  headers.set('Cache-Control','no-store');
+  const upstreamHost = env.UPSTREAM_HOST || DEFAULT_UPSTREAM;
+  if (episodeUpdatesCache?.host === upstreamHost && episodeUpdatesCache.expiresAt > Date.now()) {
+    return json(episodeUpdatesCache.payload, 200, headers);
+  }
+
+  const results = await Promise.all(EPISODE_CATEGORIES.map(async ([category,section]) => {
+    const url = new URL('/series', 'https://' + upstreamHost);
+    for (const [key,value] of Object.entries({section,category:'0',rating:'0',year:'0',language:'0',formats:'0',quality:'0',page:'1'})) {
+      url.searchParams.set(key, value);
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(url.href, {headers:{accept:'text/html'},signal:controller.signal});
+      if (!response.ok || !(response.headers.get('content-type') || '').includes('text/html')) return null;
+      const episodes = parseEpisodeCounts(await response.text());
+      return episodes.length ? [category,episodes] : null;
+    } catch (_) {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }));
+  const available = results.filter(Boolean);
+  if (!available.length) return json({error:'Episode updates are temporarily unavailable'}, 502, headers);
+  const payload = {categories:Object.fromEntries(available)};
+  if (available.length === EPISODE_CATEGORIES.length) {
+    episodeUpdatesCache = {host:upstreamHost,expiresAt:Date.now() + 60000,payload};
+  }
+  return json(payload, 200, headers);
+}
+
+function parseEpisodeCounts(html) {
+  const counts = new Map();
+  const divTags = /<\/?div\b[^>]*>/gi;
+  let cardStart = -1;
+  let depth = 0;
+  for (const match of html.matchAll(divTags)) {
+    const tag = match[0];
+    const closing = tag.startsWith('</');
+    if (cardStart < 0) {
+      if (!closing && /\bclass\s*=\s*["'][^"']*\bentry-box\b[^"']*["']/i.test(tag)) {
+        cardStart = match.index;
+        depth = 1;
+      }
+      continue;
+    }
+    depth += closing ? -1 : 1;
+    if (depth !== 0) continue;
+    const card = html.slice(cardStart, match.index + tag.length);
+    cardStart = -1;
+    const id = card.match(/href\s*=\s*["'][^"']*\/series\/(\d+)(?=\/|[?#"'])/i)?.[1];
+    const label = card.match(/<span\b(?=[^>]*\bclass\s*=\s*["'][^"']*\blabel\b[^"']*\bseries\b[^"']*["'])[^>]*>([\s\S]*?)<\/span>/i)?.[1] || '';
+    if (!id || !label) continue;
+    const text = label.replace(/<[^>]*>/g, ' ').replace(/&(?:nbsp|#160);/gi, ' ')
+      .replace(/[٠-٩]/g, digit => String(digit.charCodeAt(0) - 1632))
+      .replace(/[۰-۹]/g, digit => String(digit.charCodeAt(0) - 1776));
+    const episodes = Number(text.match(/\d+/)?.[0]);
+    if (!Number.isSafeInteger(episodes) || episodes < 0) continue;
+    counts.set(id, Math.max(counts.get(id) || 0, episodes));
+  }
+  return [...counts].map(([id,episodes]) => ({id,episodes}));
 }
 
 async function handleTranslate(request, env) {
