@@ -350,12 +350,107 @@ const bootstrapScript = String.raw`(() => {
       }
     }).observe(document.documentElement, {subtree:true,childList:true});
   }
+  const footerBrands = {
+    ar:'مسلسلات توركيفاي',
+    en:'Turkify Series',
+    tr:'Turkify Dizileri',
+    fr:'Séries Turkify',
+    de:'Turkify-Serien',
+    es:'Series de Turkify',
+    it:'Serie Turkify',
+    pt:'Séries Turkify',
+    ru:'Сериалы Turkify',
+    fa:'سریال‌های تورکیفای',
+    ur:'ترکیفائی سیریز',
+    hi:'टर्किफ़ाई सीरीज़',
+    id:'Serial Turkify',
+    ja:'Turkifyシリーズ',
+    ko:'Turkify 시리즈',
+    'zh-CN':'Turkify 剧集'
+  };
+  const footerCopyrights = {
+    ar:'جميع الحقوق محفوظة لـ {brand} © {year}',
+    en:'All rights reserved to {brand} © {year}',
+    tr:'Tüm hakları saklıdır: {brand} © {year}',
+    fr:'Tous droits réservés à {brand} © {year}',
+    de:'Alle Rechte vorbehalten für {brand} © {year}',
+    es:'Todos los derechos reservados para {brand} © {year}',
+    it:'Tutti i diritti riservati a {brand} © {year}',
+    pt:'Todos os direitos reservados a {brand} © {year}',
+    ru:'Все права защищены: {brand} © {year}',
+    fa:'تمامی حقوق برای {brand} محفوظ است © {year}',
+    ur:'{brand} کے تمام حقوق محفوظ ہیں © {year}',
+    hi:'{brand} के सर्वाधिकार सुरक्षित © {year}',
+    id:'Hak cipta {brand} dilindungi © {year}',
+    ja:'{brand} の全著作権を保有します © {year}',
+    ko:'{brand} 판권 소유 © {year}',
+    'zh-CN':'版权所有：{brand} © {year}'
+  };
+  const footerBrand = footerBrands[lang] || footerBrands.en;
+
+  function isFooterBrand(value) {
+    return /^(?:شبكة\s*)?(?:أ?كوام|akwam(?:\s+network)?)$/i.test(String(value || '').replace(/\s+/g, ' ').trim());
+  }
+
+  function blockFooterAction(event) {
+    const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
+    if (!target?.closest?.('footer')) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+
+  for (const eventName of ['click','auxclick','dblclick','keydown','submit']) {
+    document.addEventListener(eventName, blockFooterAction, true);
+  }
+
+  function updateFooter() {
+    const footer = document.querySelector('footer');
+    if (!footer) return;
+
+    const walker = document.createTreeWalker(footer, NodeFilter.SHOW_TEXT);
+    const labels = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (isFooterBrand(node.nodeValue)) labels.push(node);
+    }
+    for (const node of labels) {
+      node.nodeValue = footerBrand;
+      node.parentElement?.setAttribute('data-akwam-generated-ui', 'true');
+    }
+
+    const copyright = footer.querySelector('.copyright');
+    if (copyright) {
+      const year = copyright.textContent.match(/\b\d{4}\b/)?.[0] || String(new Date().getFullYear());
+      const template = footerCopyrights[lang] || footerCopyrights.en;
+      const localized = template.replace('{brand}', footerBrand).replace('{year}', year);
+      if (copyright.textContent !== localized) copyright.textContent = localized;
+      if (copyright.getAttribute('data-akwam-generated-ui') !== 'true') {
+        copyright.setAttribute('data-akwam-generated-ui', 'true');
+      }
+    }
+
+    for (const control of footer.querySelectorAll('a,area,button,input,select,textarea,[role="button"],[role="link"],[tabindex]')) {
+      if (control.hasAttribute('href')) control.removeAttribute('href');
+      if (control.hasAttribute('target')) control.removeAttribute('target');
+      if (control.hasAttribute('download')) control.removeAttribute('download');
+      if (control.hasAttribute('onclick')) control.removeAttribute('onclick');
+      if ('disabled' in control) control.disabled = true;
+      if (control.getAttribute('aria-disabled') !== 'true') control.setAttribute('aria-disabled', 'true');
+      if (control.getAttribute('tabindex') !== '-1') control.setAttribute('tabindex', '-1');
+      if (control.style) {
+        control.style.pointerEvents = 'none';
+        control.style.cursor = 'default';
+      }
+    }
+  }
+
   rewriteAttributes(document.documentElement);
+  updateFooter();
   new MutationObserver(records => {
     for (const record of records) {
       if (record.type === 'attributes') rewriteAttributes(record.target);
       else for (const node of record.addedNodes) rewriteAttributes(node);
     }
+    updateFooter();
   }).observe(document.documentElement, {
     subtree:true,
     childList:true,
