@@ -393,19 +393,20 @@ export const bootstrapScript = String.raw`(() => {
   }
 
   function blockFooterAction(event) {
-    const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
-    if (!target?.closest?.('footer')) return;
     event.preventDefault();
     event.stopImmediatePropagation();
   }
 
-  for (const eventName of ['click','auxclick','dblclick','keydown','submit']) {
-    document.addEventListener(eventName, blockFooterAction, true);
-  }
-
   function updateFooter() {
-    const footer = document.querySelector('footer');
+    const footer = document.querySelector?.('footer');
     if (!footer) return;
+
+    if (footer.getAttribute('data-turkify-actions-blocked') !== 'true') {
+      for (const eventName of ['click','auxclick','dblclick','keydown','submit']) {
+        footer.addEventListener(eventName, blockFooterAction, true);
+      }
+      footer.setAttribute('data-turkify-actions-blocked', 'true');
+    }
 
     const walker = document.createTreeWalker(footer, NodeFilter.SHOW_TEXT);
     const labels = [];
