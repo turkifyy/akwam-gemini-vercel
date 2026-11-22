@@ -5,6 +5,20 @@ import {runInNewContext} from 'node:vm';
 import worker from '../src/index.js';
 import {bootstrapScript} from '../src/bootstrap.js';
 
+test('episode headings remove only a repeated episode number', () => {
+  const source = bootstrapScript.match(/function normalizeEpisodeTitle\(value\) \{[\s\S]*?\n  \}/)?.[0];
+  assert.ok(source);
+  const normalizeEpisodeTitle = runInNewContext(`(${source})`);
+
+  assert.equal(normalizeEpisodeTitle('بائعة الزهور الحلقة 1 1'), 'بائعة الزهور الحلقة 1');
+  assert.equal(normalizeEpisodeTitle('مشاهدة الحلقة : 2 2'), 'مشاهدة الحلقة : 2');
+  assert.equal(normalizeEpisodeTitle('Drama Episode 10 10'), 'Drama Episode 10');
+  assert.equal(normalizeEpisodeTitle('الحلقة ١ 1'), 'الحلقة ١');
+  assert.equal(normalizeEpisodeTitle('الحلقة 1 2'), 'الحلقة 1 2');
+  assert.equal(normalizeEpisodeTitle('Series 2024 2024'), 'Series 2024 2024');
+});
+
+
 test('Arabic Akwam footer brand spelling is recognized', () => {
   const source = bootstrapScript.match(/function isFooterBrand\(value\) \{[\s\S]*?\n  \}/)?.[0];
   assert.ok(source);

@@ -6,6 +6,10 @@ const bootstrapScript = String.raw`(() => {
   const upstreamHost = String(config.upstreamHost || 'akwam.ss');
   const seoMode = config.seoMode === true;
   const routePath = (seoMode ? '/catalog/' : '/site/') + lang;
+  const pagePath = location.pathname.startsWith(routePath)
+    ? location.pathname.slice(routePath.length)
+    : location.pathname;
+  const episodePage = /^\/episode\/\d+(?:\/|$)/.test(pagePath);
   const prefix = location.origin + routePath;
   const originalFetch = window.fetch.bind(window);
 
@@ -444,6 +448,48 @@ const bootstrapScript = String.raw`(() => {
     }
   }
 
+  function normalizeEpisodeTitle(value) {
+    const normalizeDigits = digits => digits.replace(/[٠-٩۰-۹]/g, digit => {
+      const code = digit.codePointAt(0);
+      return String(code - (code >= 0x6f0 ? 0x6f0 : 0x660));
+    });
+    return String(value || '').replace(
+      /((?:الحلقة|\bepisode\b)\s*[:：]?\s*)([0-9٠-٩۰-۹]+)\s+([0-9٠-٩۰-۹]+)(?![0-9٠-٩۰-۹])/gi,
+      (match, label, number, repeated) =>
+        normalizeDigits(number) === normalizeDigits(repeated) ? label + number : match
+    );
+  }
+
+  function normalizeEpisodeTitles(root) {
+    if (!episodePage) return;
+    const scope = root?.nodeType === 3 ? root.parentElement : root;
+    if (!scope) return;
+
+    const titles = new Set();
+    const containingTitle = scope.closest?.('title, .entry-title');
+    if (containingTitle) titles.add(containingTitle);
+    if (scope.matches?.('title, .entry-title')) titles.add(scope);
+    scope.querySelectorAll?.('title, .entry-title').forEach(title => titles.add(title));
+
+    for (const title of titles) {
+      const current = title.textContent || '';
+      const normalized = normalizeEpisodeTitle(current);
+      if (normalized !== current) title.textContent = normalized;
+    }
+  }
+
+  function watchEpisodeTitles() {
+    if (!episodePage) return;
+    normalizeEpisodeTitles(document.documentElement);
+    new MutationObserver(records => {
+      for (const record of records) {
+        if (record.type === 'characterData') normalizeEpisodeTitles(record.target);
+        else for (const node of record.addedNodes) normalizeEpisodeTitles(node);
+      }
+    }).observe(document.documentElement, {subtree:true,childList:true,characterData:true});
+  }
+
+  watchEpisodeTitles();
   rewriteAttributes(document.documentElement);
   updateFooter();
   new MutationObserver(records => {
