@@ -389,7 +389,7 @@ export const bootstrapScript = String.raw`(() => {
   const footerBrand = footerBrands[lang] || footerBrands.en;
 
   function isFooterBrand(value) {
-    return /^(?:شبكة\s*)?(?:أ?كوام|akwam(?:\s+network)?)$/i.test(String(value || '').replace(/\s+/g, ' ').trim());
+    return /^(?:شبكة\s*)?(?:[اأإآ]?كوام|akwam(?:\s+network)?)$/i.test(String(value || '').replace(/\s+/g, ' ').trim());
   }
 
   function blockFooterAction(event) {

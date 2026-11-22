@@ -4,6 +4,17 @@ import {readFile} from 'node:fs/promises';
 import {runInNewContext} from 'node:vm';
 import worker from '../src/index.js';
 import {bootstrapScript} from '../src/bootstrap.js';
+
+test('Arabic Akwam footer brand spelling is recognized', () => {
+  const source = bootstrapScript.match(/function isFooterBrand\(value\) \{[\s\S]*?\n  \}/)?.[0];
+  assert.ok(source);
+  const isFooterBrand = runInNewContext(`(${source})`);
+  for (const label of ['اكوام','أكوام','شبكة اكوام','Akwam','Akwam Network']) {
+    assert.equal(isFooterBrand(label), true, label);
+  }
+  assert.equal(isFooterBrand('DMCA'), false);
+});
+
 import {translatorScript} from '../src/translator.js';
 
 const workerUrl = 'https://bridge.example.workers.dev';
