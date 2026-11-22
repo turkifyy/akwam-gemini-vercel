@@ -718,6 +718,7 @@ test('site proxy stays on the configured upstream and permits only the configure
   assert.match(denied.headers.get('content-security-policy'), /frame-ancestors 'self'/);
 });
 
+test('episode updates report episode counts for each allowed catalog category', async t => {
   const originalFetch = globalThis.fetch;
   const sections = [];
   globalThis.fetch = async input => {
