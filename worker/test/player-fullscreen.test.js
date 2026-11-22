@@ -29,6 +29,24 @@ function createClassList() {
 function runWatchPage(episode, sessionStorage = createStorage()) {
   const messages = [];
   const listeners = new Map();
+  const mobileSearchStyles = [];
+  const searchToggle = {clickCount:0,click() { this.clickCount += 1; }};
+  const searchInput = {focused:false,focus() { this.focused = true; }};
+  const searchBox = {
+    querySelector(selector) {
+      if (selector === '.search-toggle') return searchToggle;
+      if (selector === 'input[type="search"]') return searchInput;
+      return null;
+    }
+  };
+  const userProfile = {};
+  const searchButtons = [];
+  const searchRow = {
+    insertBefore(element, reference) {
+      element.insertedBefore = reference;
+      searchButtons.push(element);
+    }
+  };
   const playerClassList = createClassList();
   const button = {
     closest(selector) { return selector === '.plyr' ? player : null; },
@@ -69,9 +87,20 @@ function runWatchPage(episode, sessionStorage = createStorage()) {
   const document = {
     readyState:'complete',
     documentElement:root,
-    head:{appendChild() {}},
-    createElement() { return {textContent:''}; },
+    head:{appendChild(element) { mobileSearchStyles.push(element); }},
+    createElement(tagName) {
+      const element = {
+        tagName,textContent:'',attributes:{},listeners:{},
+        setAttribute(name,value) { this.attributes[name] = String(value); },
+        addEventListener(name,callback) { this.listeners[name] = callback; }
+      };
+      return element;
+    },
     querySelector(selector) {
+      if (selector === '.main-header .row') return searchRow;
+      if (selector === '.search-box') return searchBox;
+      if (selector === '.user-profile-container') return userProfile;
+      if (selector === '.akwam-mobile-search-button') return null;
       if (selector.includes('/series/')) return seriesLink;
       if (selector.includes('/episode/')) return episodeLink;
       if (selector === '.plyr.akwam-immersive-player') {
@@ -106,7 +135,7 @@ function runWatchPage(episode, sessionStorage = createStorage()) {
   };
 
   vm.runInNewContext(bootstrapScript, context);
-  return {player,button,listeners,messages,sessionStorage};
+  return {player,button,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile};
 }
 
 function clickFullscreen(page) {
@@ -117,6 +146,19 @@ function clickFullscreen(page) {
   };
   page.listeners.get('click').at(-1)(event);
 }
+
+test("mobile search is reachable and focuses the existing search form", () => {
+  const page = runWatchPage(1);
+  const button = page.searchButtons[0];
+  assert.ok(button);
+  assert.equal(button.type, "button");
+  assert.equal(button.attributes["aria-label"], "Search");
+  assert.equal(button.insertedBefore, page.userProfile);
+  assert.match(page.mobileSearchStyles.map(style => style.textContent).join("\n"), /@media\(max-width:767px\)/);
+  button.listeners.click();
+  assert.equal(page.searchToggle.clickCount, 1);
+  assert.equal(page.searchInput.focused, true);
+});
 
 test('episode 1 starts in the immersive player layout', () => {
   const page = runWatchPage(1);

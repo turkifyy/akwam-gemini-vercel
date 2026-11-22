@@ -693,7 +693,7 @@ test('site proxy stays on the configured upstream and permits only the configure
   assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'self' https:\/\/series\.example\.vercel\.app/);
   assert.equal(response.headers.get('x-frame-options'), null);
 
-  for (const src of ['https://e.dtscout.com/e/?v=1a','https://aarems.org/20']) {
+  for (const src of ['https://e.dtscout.com/e/?v=1a','https://aarems.org/20','https://mamshirt.com/ad.js']) {
     const adScript = {
       attributes:{src},
       getAttribute(name) { return this.attributes[name] ?? null; },

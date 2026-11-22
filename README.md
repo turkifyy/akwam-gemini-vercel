@@ -21,13 +21,13 @@
 - الواجهة المنشورة: `https://turkifyseries.vercel.app`.
 - النطاق الأساسي للإنتاج: `https://turkifyseries.vercel.app` (تم تحديثه في 21 نوفمبر 2026).
 - نُشر شريط أقسام تركي وهندي وكوري وأجنبي إلى المشروع الإنتاجي `akwam-gemini-vercel`، مع الإبقاء على Cloudflare Worker الحالي.
-- Cloudflare Worker المنشور: `https://akwam-gemini-bridge.osamalovirboy.workers.dev`.
-- إصدار Worker النشط: `f33b624b`.
+- Cloudflare Worker المنشور: `https://turkifyseries.osamalovirboy.workers.dev`.
+- بيانات الالتزام وإصدارات Worker المنشورة محفوظة في سجل الإصدارات لدى Cloudflare.
 - نُشر إصلاح تسميات التنقل وعناوين الملصقات إلى إنتاج Vercel في الإصدار أعلاه؛ بقي Cloudflare Worker الحالي دون تغيير.
 - تحققنا من `/health`: الحالة سليمة، ومفتاح Gemini مهيأ، والنموذج `gemini-3.5-flash-lite`.
 - في اختبار حي، رفض Worker فتح نافذة خارجية، وفتح رابط ملصق مسلسل داخل الإطار نفسه دون إنشاء تبويب جديد.
 - إعداد iframe المنشور لا يتضمن `allow-popups`، وسكربت `__bridge/bootstrap.js` استجاب بحالة 200 مع `Cache-Control: no-store`.
-- اجتازت اختبارات Worker الخمسة عشر وفحوصات صياغة JavaScript بعد إصلاح تسميات التنقل وعناوين الملصقات.
+- يشغّل GitHub Actions اختبارات Worker (`npm test`) وفحوص الصياغة (`npm run check`) ويتحقق من تطابق الحزمة المجمعة مع المصدر.
 - اختبرنا تفضيلات متصفح عربية وتركية مع بلد IP أمريكي؛ اختارت الواجهة لغة المتصفح في الحالتين. في اختبار التركية، ظهرت 24 ترجمة لعنوان ملصق فوق الملصقات مع بقاء الصور الأصلية كما هي.
 - استجاب كل من `__bridge/bootstrap.js` و`__bridge/translator.js` بحالة 200 وترويسة `Cache-Control: no-store`.
 - لا يرسل Worker مفتاح Gemini للمتصفح. يقرأ بلد الزائر من بيانات Cloudflare الوصفية عند الحافة ولا يرسل عنوان IP إلى IPinfo.

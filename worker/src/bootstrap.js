@@ -357,6 +357,44 @@ export const bootstrapScript = String.raw`(() => {
       }
     }).observe(document.documentElement, {subtree:true,childList:true});
   }
+  function installMobileSearch() {
+    const row = document.querySelector('.main-header .row');
+    const searchBox = document.querySelector('.search-box');
+    const searchToggle = searchBox?.querySelector('.search-toggle');
+    const input = searchBox?.querySelector('input[type="search"]');
+    if (!row || !searchToggle || !input || document.querySelector('.akwam-mobile-search-button')) return;
+
+    const labels = {
+      ar:'بحث',en:'Search',tr:'Ara',fr:'Rechercher',de:'Suchen',es:'Buscar',it:'Cerca',pt:'Pesquisar',
+      ru:'Поиск',fa:'جستجو',ur:'تلاش',hi:'खोजें',id:'Cari',ja:'検索',ko:'검색','zh-CN':'搜索'
+    };
+    const label = labels[lang] || 'Search';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'akwam-mobile-search-button';
+    button.setAttribute('aria-label', label);
+    button.setAttribute('title', label);
+    button.setAttribute('data-akwam-generated-ui', 'true');
+    button.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>';
+    button.addEventListener('click', () => {
+      searchToggle.click();
+      input.focus({preventScroll:true});
+    });
+
+    const style = document.createElement('style');
+    style.textContent = '.akwam-mobile-search-button{display:none;align-items:center;justify-content:center;width:44px;height:44px;margin:0 2px;padding:0;border:0;border-radius:50%;background:transparent;color:#fff;cursor:pointer;flex:0 0 auto}' +
+      '.akwam-mobile-search-button:focus-visible{outline:2px solid currentColor;outline-offset:2px}' +
+      '@media(max-width:767px){.akwam-mobile-search-button{display:inline-flex!important}}';
+    document.head.appendChild(style);
+    row.insertBefore(button, document.querySelector('.user-profile-container'));
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installMobileSearch, {once:true});
+  } else {
+    installMobileSearch();
+  }
+
   const footerBrands = {
     ar:'مسلسلات توركيفاي',
     en:'Turkify Series',

@@ -1,0 +1,30 @@
+name: Worker checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build and verify the tracked bundle
+        working-directory: worker
+        run: |
+          npm run bundle
+          git diff --exit-code -- bundle.js
+      - name: Run Worker tests
+        working-directory: worker
+        run: npm test
+      - name: Check JavaScript syntax
+        working-directory: worker
+        run: npm run check
