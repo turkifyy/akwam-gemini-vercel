@@ -360,6 +360,7 @@ test('external popups are blocked while internal opens navigate in-frame', async
   const location = {
     origin:workerUrl,
     href:workerUrl + '/site/en/series?__parent=' + encodeURIComponent(parentOrigin),
+    pathname:'/site/en/series',
     assign(url) { assignments.push(url); }
   };
   const root = {nodeType:1,tagName:'HTML',getAttribute() { return null; },querySelectorAll() { return []; }};
@@ -570,6 +571,7 @@ test('SEO bootstrap preserves public catalog routes', () => {
   const location = {
     origin:parentOrigin,
     href:parentOrigin + '/catalog/ar/series',
+    pathname:'/catalog/ar/series',
     assign(url) { assignments.push(url); }
   };
   const root = {nodeType:1,tagName:'HTML',getAttribute() { return null; },querySelectorAll() { return [link]; }};
