@@ -341,7 +341,8 @@
     nav.setAttribute('aria-label', labels.nav);
     nav.querySelectorAll('.category-tab').forEach(button => {
       const label = labels[button.dataset.category] || navigationLabels.en[button.dataset.category];
-      button.querySelector('.category-label').textContent = label;
+      const labelTarget = button.querySelector('.category-label') || button.querySelector('span');
+      if (labelTarget) labelTarget.textContent = label;
       button.title = label;
     });
     updateNotificationBadges();
