@@ -717,3 +717,32 @@ test('site proxy stays on the configured upstream and permits only the configure
   assert.equal(new URL(upstreamUrl).hostname, 'akwam.ss');
   assert.match(denied.headers.get('content-security-policy'), /frame-ancestors 'self'/);
 });
+
+  const originalFetch = globalThis.fetch;
+  const sections = [];
+  globalThis.fetch = async input => {
+    const url = new URL(String(input));
+    sections.push(url.searchParams.get('section'));
+    const id = url.searchParams.get('section') === '32' ? '42' : url.searchParams.get('section');
+    const count = url.searchParams.get('section') === '32' ? '١٢' : '4';
+    return new Response('<div class="entry-box"><div class="labels"><span class="label series"><i></i>' + count + '</span></div><a href="/series/' + id + '/title">Title</a></div>', {
+      headers:{'content-type':'text/html; charset=utf-8'}
+    });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  const origin = 'https://series.example.vercel.app';
+  const response = await worker.fetch(new Request(workerUrl + '/api/episode-updates', {
+    headers:{Origin:origin}
+  }), {ALLOWED_PARENT_ORIGINS:origin});
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Access-Control-Allow-Origin'), origin);
+  const result = await response.json();
+  assert.deepEqual(result.categories.turkish, [{id:'42',episodes:12}]);
+  assert.deepEqual(new Set(sections), new Set(['30','31','32','33']));
+
+  const denied = await worker.fetch(new Request(workerUrl + '/api/episode-updates', {
+    headers:{Origin:'https://attacker.example'}
+  }), {ALLOWED_PARENT_ORIGINS:origin});
+  assert.equal(denied.status, 403);
+});
