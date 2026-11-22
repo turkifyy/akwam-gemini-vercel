@@ -15,6 +15,7 @@ function makeVideo({duration = 1850, currentTime = 0, readyState = 1, source = "
     readyState,
     muted:false,
     playCalls:0,
+    closest() { return null; },
     play() { this.playCalls++; return Promise.resolve(); },
     addEventListener(name, listener) {
       const callbacks = listeners.get(name) || [];
@@ -32,10 +33,6 @@ function runBootstrap(pathname, videos = []) {
     tagName:"HTML",
     querySelectorAll(selector) { return selector === "video" ? videos : []; }
   };
-  class MutationObserver {
-    constructor(callback) { this.callback = callback; observers.push(this); }
-    observe() {}
-  }
   const window = {
     __AKWAM_BRIDGE__:{lang:"en",upstreamHost:"akwam.ss"},
     fetch:() => Promise.resolve(),
@@ -44,10 +41,18 @@ function runBootstrap(pathname, videos = []) {
   const context = {
     window,
     location:{href:"https://example.com" + pathname,origin:"https://example.com",pathname},
-    document:{documentElement:root},
+    document:{
+      readyState:"loading",
+      documentElement:root,
+      head:{appendChild() {}},
+      createElement() { return {textContent:""}; },
+      querySelector() { return null; },
+      querySelectorAll() { return []; },
+      addEventListener() {}
+    },
     XMLHttpRequest:class { open() {} },
     history:{pushState() {},replaceState() {}},
-    MutationObserver,
+    MutationObserver:class { constructor(callback) { this.callback = callback; observers.push(this); } observe() {} },
     URL,
     Request,
     console
@@ -112,7 +117,6 @@ test("player resets to the intro are corrected before playback", () => {
   video.emit("play");
   assert.equal(video.currentTime, 85);
 });
-
 
 test("rejected autoplay retries muted", async () => {
   const video = makeVideo();
