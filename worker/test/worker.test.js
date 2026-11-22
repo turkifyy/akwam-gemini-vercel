@@ -15,6 +15,9 @@ test('episode headings remove only a repeated episode number', () => {
   assert.equal(normalizeEpisodeTitle('Drama Episode 10 10'), 'Drama Episode 10');
   assert.equal(normalizeEpisodeTitle('الحلقة ١ 1'), 'الحلقة ١');
   assert.equal(normalizeEpisodeTitle('الحلقة 1 2'), 'الحلقة 1 2');
+  assert.equal(normalizeEpisodeTitle('حلقة 3 3'), 'حلقة 3');
+  assert.equal(normalizeEpisodeTitle('حلقة 3 : مسلسل بائعة الزهور مدبلج 3'), 'حلقة 3 : مسلسل بائعة الزهور مدبلج');
+  assert.equal(normalizeEpisodeTitle('حلقة ٤ : مسلسل بائعة الزهور مدبلج 4'), 'حلقة ٤ : مسلسل بائعة الزهور مدبلج');
   assert.equal(normalizeEpisodeTitle('Series 2024 2024'), 'Series 2024 2024');
 });
 

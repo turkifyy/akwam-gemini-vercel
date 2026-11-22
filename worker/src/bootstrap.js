@@ -10,6 +10,7 @@ export const bootstrapScript = String.raw`(() => {
     ? location.pathname.slice(routePath.length)
     : location.pathname;
   const episodePage = /^\/episode\/\d+(?:\/|$)/.test(pagePath);
+  const seriesPage = /^\/series\/\d+(?:\/|$)/.test(pagePath);
   const prefix = location.origin + routePath;
   const originalFetch = window.fetch.bind(window);
 
@@ -453,23 +454,29 @@ export const bootstrapScript = String.raw`(() => {
       const code = digit.codePointAt(0);
       return String(code - (code >= 0x6f0 ? 0x6f0 : 0x660));
     });
-    return String(value || '').replace(
-      /((?:الحلقة|\bepisode\b)\s*[:：]?\s*)([0-9٠-٩۰-۹]+)\s+([0-9٠-٩۰-۹]+)(?![0-9٠-٩۰-۹])/gi,
-      (match, label, number, repeated) =>
-        normalizeDigits(number) === normalizeDigits(repeated) ? label + number : match
+    const sameNumber = (first, repeated) => normalizeDigits(first) === normalizeDigits(repeated);
+    const adjacentDuplicate = String(value || '').replace(
+      /((?:ال)?حلقة|\bepisode\b)(\s*[:：]?\s*)([0-9٠-٩۰-۹]+)\s+([0-9٠-٩۰-۹]+)(?![0-9٠-٩۰-۹])/gi,
+      (match, label, separator, number, repeated) =>
+        sameNumber(number, repeated) ? label + separator + number : match
+    );
+    return adjacentDuplicate.replace(
+      /((?:ال)?حلقة)(\s*[:：]?\s*)([0-9٠-٩۰-۹]+)(\s*[:：]\s*مسلسل\s+[\s\S]*?\S)\s+([0-9٠-٩۰-۹]+)(?![0-9٠-٩۰-۹])$/gi,
+      (match, label, separator, number, title, repeated) =>
+        sameNumber(number, repeated) ? label + separator + number + title : match
     );
   }
 
   function normalizeEpisodeTitles(root) {
-    if (!episodePage) return;
+    if (!episodePage && !seriesPage) return;
     const scope = root?.nodeType === 3 ? root.parentElement : root;
     if (!scope) return;
 
     const titles = new Set();
-    const containingTitle = scope.closest?.('title, .entry-title');
+    const containingTitle = scope.closest?.('title, .entry-title, a[href*="/episode/"]');
     if (containingTitle) titles.add(containingTitle);
-    if (scope.matches?.('title, .entry-title')) titles.add(scope);
-    scope.querySelectorAll?.('title, .entry-title').forEach(title => titles.add(title));
+    if (scope.matches?.('title, .entry-title, a[href*="/episode/"]')) titles.add(scope);
+    scope.querySelectorAll?.('title, .entry-title, a[href*="/episode/"]').forEach(title => titles.add(title));
 
     for (const title of titles) {
       const current = title.textContent || '';
@@ -479,7 +486,7 @@ export const bootstrapScript = String.raw`(() => {
   }
 
   function watchEpisodeTitles() {
-    if (!episodePage) return;
+    if (!episodePage && !seriesPage) return;
     normalizeEpisodeTitles(document.documentElement);
     new MutationObserver(records => {
       for (const record of records) {
