@@ -360,6 +360,7 @@ test('external popups are blocked while internal opens navigate in-frame', async
   const location = {
     origin:workerUrl,
     href:workerUrl + '/site/en/series?__parent=' + encodeURIComponent(parentOrigin),
+    pathname:'/site/en/series',
     assign(url) { assignments.push(url); }
   };
   const root = {nodeType:1,tagName:'HTML',getAttribute() { return null; },querySelectorAll() { return []; }};
@@ -372,7 +373,7 @@ test('external popups are blocked while internal opens navigate in-frame', async
     Request,
     XMLHttpRequest:TestXHR,
     history:{pushState() {},replaceState() {}},
-    document:{documentElement:root},
+    document:{documentElement:root,querySelector() { return null; },addEventListener() {}},
     MutationObserver:TestMutationObserver
   });
 
@@ -570,6 +571,7 @@ test('SEO bootstrap preserves public catalog routes', () => {
   const location = {
     origin:parentOrigin,
     href:parentOrigin + '/catalog/ar/series',
+    pathname:'/catalog/ar/series',
     assign(url) { assignments.push(url); }
   };
   const root = {nodeType:1,tagName:'HTML',getAttribute() { return null; },querySelectorAll() { return [link]; }};
@@ -578,7 +580,7 @@ test('SEO bootstrap preserves public catalog routes', () => {
   runInNewContext(bootstrapScript, {
     window,location,URL,Request,XMLHttpRequest:TestXHR,
     history:{pushState() {},replaceState() {}},
-    document:{documentElement:root},MutationObserver:TestMutationObserver
+    document:{documentElement:root,querySelector() { return null; },addEventListener() {}},MutationObserver:TestMutationObserver
   });
 
   assert.equal(attributes.href, parentOrigin + '/catalog/ar/series/5946/the-perfect-lie');
