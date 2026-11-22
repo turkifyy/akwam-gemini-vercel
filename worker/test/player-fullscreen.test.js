@@ -55,9 +55,10 @@ function runWatchPage(episode, sessionStorage = createStorage()) {
     }
   };
   const seriesLink = {href:'https://worker.example/site/en/series/5744/show'};
+  const episodeId = 102320 + episode;
   const episodeLink = {
     innerText:`الحلقة ${episode} ${episode}`,
-    href:`https://worker.example/site/en/episode/102325/show/الحلقة-${episode}`
+    href:`https://worker.example/site/en/episode/${episodeId}/show/الحلقة-${episode}`
   };
   const root = {
     nodeType:1,
@@ -86,9 +87,9 @@ function runWatchPage(episode, sessionStorage = createStorage()) {
     }
   };
   const location = {
-    href:`https://worker.example/site/en/watch/181288/102325/show/episode-${episode}`,
+    href:`https://worker.example/site/en/watch/181288/${episodeId}/show/episode-${episode}`,
     origin:'https://worker.example',
-    pathname:`/site/en/watch/181288/102325/show/episode-${episode}`,
+    pathname:`/site/en/watch/181288/${episodeId}/show/episode-${episode}`,
     assign() {}
   };
   const window = {
@@ -131,15 +132,23 @@ test('episode 2 and later request the immersive player layout', () => {
   }
 });
 
-test('manual exit on episode 1 stays dismissed on later episodes of the same series', () => {
+test('manual exit stays on the current episode while later episodes auto-expand', () => {
   const sessionStorage = createStorage();
   const episodeOne = runWatchPage(1, sessionStorage);
   clickFullscreen(episodeOne);
   assert.equal(episodeOne.player.classList.contains('akwam-immersive-player'), false);
 
+  const episodeOneAgain = runWatchPage(1, sessionStorage);
+  assert.equal(episodeOneAgain.player.classList.contains('akwam-immersive-player'), false);
   const episodeTwo = runWatchPage(2, sessionStorage);
-  assert.equal(episodeTwo.player.classList.contains('akwam-immersive-player'), false);
-  assert.equal(episodeTwo.messages.some(({message}) => message.type === 'player-immersive' && message.active === false), true);
+  assert.equal(episodeTwo.player.classList.contains('akwam-immersive-player'), true);
+});
+
+test('old series-wide dismissal does not block automatic mode', () => {
+  const sessionStorage = createStorage();
+  sessionStorage.setItem('akwam-immersive-dismissed-v1:5744', '1');
+  const page = runWatchPage(3, sessionStorage);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
 });
 
 test('manual toggle can re-enable immersive mode', () => {

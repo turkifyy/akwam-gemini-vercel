@@ -21,6 +21,24 @@ test('episode headings remove only a repeated episode number', () => {
   assert.equal(normalizeEpisodeTitle('Series 2024 2024'), 'Series 2024 2024');
 });
 
+test('watch pages normalize duplicated episode titles and links', () => {
+  const source = bootstrapScript.match(/function normalizeEpisodeTitles\(root\) \{[\s\S]*?\n  \}/)?.[0];
+  const titleSource = bootstrapScript.match(/function normalizeEpisodeTitle\(value\) \{[\s\S]*?\n  \}/)?.[0];
+  assert.ok(source);
+  assert.ok(titleSource);
+  const normalizeEpisodeTitle = runInNewContext('(' + titleSource + ')');
+  const title = {textContent:'مشاهدة مسلسل بائعة الزهور الحلقة 3 3 | اكوام'};
+  const episodeLink = {textContent:'الحلقة 3 3'};
+  const root = {nodeType:1,closest() { return null; },matches() { return false; },querySelectorAll() { return [title,episodeLink]; }};
+  const normalizeEpisodeTitles = runInNewContext('(' + source + ')', {
+    episodePage:false,seriesPage:false,watchPage:true,normalizeEpisodeTitle
+  });
+  normalizeEpisodeTitles(root);
+  assert.equal(title.textContent, 'مشاهدة مسلسل بائعة الزهور الحلقة 3 | اكوام');
+  assert.equal(episodeLink.textContent, 'الحلقة 3');
+});
+
+
 
 test('Arabic Akwam footer brand spelling is recognized', () => {
   const source = bootstrapScript.match(/function isFooterBrand\(value\) \{[\s\S]*?\n  \}/)?.[0];

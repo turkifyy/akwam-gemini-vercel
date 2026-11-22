@@ -228,14 +228,16 @@ const bootstrapScript = String.raw`(() => {
     (document.head || document.documentElement).appendChild(immersiveStyle);
 
     function immersiveDismissKey() {
-      const seriesLink = document.querySelector('a[href*="/series/"]');
-      if (!seriesLink) return '';
+      const episodeLink = document.querySelector('h2 a[href*="/episode/"], .breadcrumb a[href*="/episode/"], a[href*="/episode/"]');
       try {
-        const seriesId = new URL(seriesLink.href, location.href).pathname.match(/\/series\/(\d+)(?:\/|$)/)?.[1];
-        return seriesId ? 'akwam-immersive-dismissed-v1:' + seriesId : '';
-      } catch (_) {
-        return '';
-      }
+        const path = new URL(episodeLink?.href || location.href, location.href).pathname;
+        const segments = path.split('/').filter(Boolean);
+        const episodeIndex = segments.indexOf('episode');
+        const watchIndex = segments.indexOf('watch');
+        const episodeId = episodeIndex >= 0 ? segments[episodeIndex + 1]
+          : watchIndex >= 0 ? segments[watchIndex + 2] : '';
+        return episodeId ? 'akwam-immersive-dismissed-v2:' + episodeId : '';
+      } catch (_) { return ''; }
     }
 
     function immersiveDismissed() {
@@ -468,7 +470,7 @@ const bootstrapScript = String.raw`(() => {
   }
 
   function normalizeEpisodeTitles(root) {
-    if (!episodePage && !seriesPage) return;
+    if (!episodePage && !seriesPage && !watchPage) return;
     const scope = root?.nodeType === 3 ? root.parentElement : root;
     if (!scope) return;
 
@@ -486,7 +488,7 @@ const bootstrapScript = String.raw`(() => {
   }
 
   function watchEpisodeTitles() {
-    if (!episodePage && !seriesPage) return;
+    if (!episodePage && !seriesPage && !watchPage) return;
     normalizeEpisodeTitles(document.documentElement);
     new MutationObserver(records => {
       for (const record of records) {
