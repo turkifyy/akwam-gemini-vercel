@@ -338,7 +338,7 @@ export const bootstrapScript = String.raw`(() => {
 
     function installCustomPlayer(video) {
       const player = video.closest('.plyr');
-      if (!player || player.dataset.akwamCustomReady === '1') return;
+      if (!player || player.dataset?.akwamCustomReady === '1') return;
       if (!player.querySelector('.plyr__video-wrapper')) return;
 
       if (!customPlayerStyle) {
