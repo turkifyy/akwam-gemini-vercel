@@ -252,6 +252,13 @@ const bootstrapScript = String.raw`(() => {
       document.documentElement.classList.toggle('akwam-immersive-page', active);
       const button = player.querySelector('button[data-plyr="fullscreen"]');
       if (button) button.setAttribute('aria-pressed', String(active));
+      const customButton = player.querySelector('.akwam-player-fullscreen');
+      if (customButton) {
+        const label = active ? 'إنهاء ملء الشاشة' : 'ملء الشاشة';
+        customButton.setAttribute('aria-label',label);
+        customButton.setAttribute('aria-pressed',String(active));
+        customButton.title = label;
+      }
       post('player-immersive', {active});
 
       const key = immersiveDismissKey();
@@ -327,8 +334,318 @@ const bootstrapScript = String.raw`(() => {
       }
     }
 
+    let customPlayerStyle;
+
+    function installCustomPlayer(video) {
+      const player = video.closest('.plyr');
+      if (!player || player.dataset.akwamCustomReady === '1') return;
+      if (!player.querySelector('.plyr__video-wrapper')) return;
+
+      if (!customPlayerStyle) {
+        customPlayerStyle = document.createElement('style');
+        customPlayerStyle.textContent = '.akwam-custom-player .plyr__controls,.akwam-custom-player .plyr__control--overlaid{display:none!important}' +
+          '.akwam-custom-player:not(.akwam-immersive-player){position:relative!important}' +
+          '.akwam-custom-player .akwam-player-ui{position:absolute;inset:0;z-index:20;color:#fff;font:500 14px/1.4 system-ui,sans-serif;direction:rtl;pointer-events:none}' +
+          '.akwam-player-title{position:absolute;top:0;left:0;right:0;padding:16px 20px 34px;background:linear-gradient(#000b,transparent);font-size:15px;font-weight:700;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+          '.akwam-player-center{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}' +
+          '.akwam-custom-player .akwam-player-button{width:40px!important;height:40px!important;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer;pointer-events:auto;transition:background .15s ease,transform .15s ease}' +
+          '.akwam-custom-player .akwam-player-button:hover{background:#ffffff22;transform:scale(1.06)}' +
+          '.akwam-custom-player .akwam-player-button:focus-visible{outline:2px solid #d5f287;outline-offset:3px}' +
+          '.akwam-custom-player .akwam-player-button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}' +
+          '.akwam-custom-player .akwam-player-center-button{width:76px!important;height:76px!important;background:#d5f287;color:#11150f;box-shadow:0 8px 32px #0008}' +
+          '.akwam-custom-player .akwam-player-center-button:hover{background:#e3ffa0}' +
+          '.akwam-custom-player .akwam-player-center-button svg{width:32px;height:32px}' +
+          '.akwam-player-center-button[hidden],.akwam-player-button[hidden]{display:none!important}' +
+          '.akwam-player-controls{position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column;gap:8px;padding:28px 18px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(transparent,#000d 34%,#000e);pointer-events:auto;opacity:1;transition:opacity .22s ease}' +
+          '.akwam-custom-player .akwam-player-seek{width:100%!important;height:6px!important;margin:0!important;appearance:none!important;border:0!important;border-radius:9px!important;background:linear-gradient(to right,#d5f287 0%,#d5f287 var(--akwam-progress,0%),#ffffff66 var(--akwam-progress,0%),#ffffff66 100%)!important;cursor:pointer;direction:ltr}' +
+          '.akwam-custom-player .akwam-player-seek::-webkit-slider-thumb{width:13px;height:13px;appearance:none;border:0;border-radius:50%;background:#d5f287;box-shadow:0 1px 5px #0008}' +
+          '.akwam-custom-player .akwam-player-seek::-moz-range-thumb{width:13px;height:13px;border:0;border-radius:50%;background:#d5f287;box-shadow:0 1px 5px #0008}' +
+          '.akwam-player-row{display:flex;align-items:center;gap:8px;min-height:40px;direction:ltr}' +
+          '.akwam-player-time{min-width:94px;color:#fff;font-size:12px;font-variant-numeric:tabular-nums;text-align:center;direction:ltr}' +
+          '.akwam-player-spacer{flex:1}' +
+          '.akwam-player-volume{display:flex;align-items:center;gap:4px}' +
+          '.akwam-custom-player .akwam-player-volume-range{width:82px!important;height:4px!important;appearance:none!important;accent-color:#d5f287;cursor:pointer}' +
+          '.akwam-player-settings{position:absolute;right:18px;bottom:86px;z-index:2;width:min(270px,calc(100% - 36px));padding:12px;border:1px solid #ffffff20;border-radius:12px;background:#10130ff2;box-shadow:0 10px 35px #0009;pointer-events:auto;backdrop-filter:blur(12px)}' +
+          '.akwam-player-settings[hidden]{display:none!important}' +
+          '.akwam-player-settings-title{margin:0 0 8px;color:#d5f287;font-size:13px;font-weight:700}' +
+          '.akwam-player-setting{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:6px 0;color:#fff;font-size:13px}' +
+          '.akwam-player-setting select{max-width:132px;padding:7px 9px;border:1px solid #ffffff24;border-radius:7px;background:#22271f;color:#fff;font:inherit;direction:ltr}' +
+          '.akwam-custom-player.akwam-controls-hidden .akwam-player-controls,.akwam-custom-player.akwam-controls-hidden .akwam-player-title{opacity:0;pointer-events:none}' +
+          '@media(max-width:600px){.akwam-player-controls{gap:6px;padding:24px 10px calc(8px + env(safe-area-inset-bottom))}.akwam-player-row{gap:4px;min-height:38px}.akwam-custom-player .akwam-player-button{width:36px!important;height:36px!important}.akwam-custom-player .akwam-player-button svg{width:19px;height:19px}.akwam-player-time{min-width:82px;font-size:11px}.akwam-player-volume-range{display:none}.akwam-custom-player .akwam-player-center-button{width:64px!important;height:64px!important}.akwam-custom-player .akwam-player-center-button svg{width:28px;height:28px}.akwam-player-settings{right:10px;bottom:76px}}' +
+          '@media(prefers-reduced-motion:reduce){.akwam-player-button,.akwam-player-controls{transition:none}}';
+        (document.head || document.documentElement).appendChild(customPlayerStyle);
+      }
+
+      player.dataset.akwamCustomReady = '1';
+      player.classList.add('akwam-custom-player');
+      const ui = document.createElement('div');
+      ui.className = 'akwam-player-ui';
+      ui.setAttribute('dir','rtl');
+
+      const heading = document.createElement('div');
+      heading.className = 'akwam-player-title';
+      const titleParts = [document.querySelector('h1')?.textContent,document.querySelector('h2')?.textContent]
+        .map(value => String(value || '').trim()).filter(Boolean);
+      heading.textContent = titleParts.join(' - ') || document.title.split('|')[0].trim();
+
+      const playPath = '<path d="M9 5.5v13L19 12 9 5.5Z" fill="currentColor" stroke="none"/>';
+      const pausePath = '<path d="M7.5 5h3.5v14H7.5zM14 5h3.5v14H14z" fill="currentColor" stroke="none"/>';
+      function makeButton(name,label,path) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'akwam-player-button akwam-player-' + name;
+        button.setAttribute('aria-label',label);
+        button.title = label;
+        button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + path + '</svg>';
+        return button;
+      }
+
+      const center = document.createElement('div');
+      center.className = 'akwam-player-center';
+      const centerButton = makeButton('center-button','تشغيل الفيديو',playPath);
+      centerButton.classList.add('akwam-player-center-button');
+      center.appendChild(centerButton);
+
+      const controls = document.createElement('div');
+      controls.className = 'akwam-player-controls';
+      const seek = document.createElement('input');
+      seek.className = 'akwam-player-seek';
+      seek.type = 'range';
+      seek.min = '0';
+      seek.max = '1000';
+      seek.step = '1';
+      seek.value = '0';
+      seek.setAttribute('aria-label','موضع التشغيل');
+
+      const row = document.createElement('div');
+      row.className = 'akwam-player-row';
+      const playButton = makeButton('play','تشغيل',playPath);
+      const time = document.createElement('span');
+      time.className = 'akwam-player-time';
+      time.textContent = '00:00 / 00:00';
+      const volume = document.createElement('div');
+      volume.className = 'akwam-player-volume';
+      const muteButton = makeButton('mute','تشغيل الصوت','<path d="M4 9v6h4l5 4V5L8 9H4Z" fill="currentColor" stroke="none"/><path d="M16 9l5 6m0-6-5 6"/>');
+      const volumeRange = document.createElement('input');
+      volumeRange.className = 'akwam-player-volume-range';
+      volumeRange.type = 'range';
+      volumeRange.min = '0';
+      volumeRange.max = '1';
+      volumeRange.step = '0.05';
+      volumeRange.value = '1';
+      volumeRange.setAttribute('aria-label','مستوى الصوت');
+      volume.append(muteButton,volumeRange);
+      const spacer = document.createElement('span');
+      spacer.className = 'akwam-player-spacer';
+      const settingsButton = makeButton('settings-toggle','إعدادات المشغل','<path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.4 15 .1.1a1.7 1.7 0 1 1-2.4 2.4l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a1.7 1.7 0 1 1-3.4 0v-.2a1.7 1.7 0 0 0-2.9-1.2l-.1.1a1.7 1.7 0 1 1-2.4-2.4l.1-.1a1.7 1.7 0 0 0-1.2-2.9H4a1.7 1.7 0 1 1 0-3.4h.2a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a1.7 1.7 0 1 1 2.4-2.4l.1.1a1.7 1.7 0 0 0 2.9-1.2V2a1.7 1.7 0 1 1 3.4 0v.2a1.7 1.7 0 0 0 2.9 1.2l.1-.1a1.7 1.7 0 1 1 2.4 2.4l.1.1a1.7 1.7 0 0 0 1.2 2.9h.2a1.7 1.7 0 1 1 0 3.4h-.2a1.7 1.7 0 0 0-1.2 2.9Z" transform="translate(1 3) scale(.85)"/>');
+      settingsButton.setAttribute('aria-expanded','false');
+      const pipButton = makeButton('pip','نافذة عائمة','<rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="5" rx="1" fill="currentColor" stroke="none"/>');
+      const fullscreenButton = makeButton('fullscreen','ملء الشاشة','<path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4"/>');
+      row.append(playButton,time,volume,spacer,settingsButton,pipButton,fullscreenButton);
+      controls.append(seek,row);
+
+      const settings = document.createElement('div');
+      settings.className = 'akwam-player-settings';
+      settings.hidden = true;
+      settings.setAttribute('aria-label','إعدادات المشغل');
+      const settingsTitle = document.createElement('div');
+      settingsTitle.className = 'akwam-player-settings-title';
+      settingsTitle.textContent = 'إعدادات المشغل';
+      settings.appendChild(settingsTitle);
+      function addSetting(labelText,options) {
+        const label = document.createElement('label');
+        label.className = 'akwam-player-setting';
+        const caption = document.createElement('span');
+        caption.textContent = labelText;
+        const select = document.createElement('select');
+        select.setAttribute('aria-label',labelText);
+        for (const item of options) {
+          const option = document.createElement('option');
+          option.value = String(item.value);
+          option.textContent = item.label;
+          select.appendChild(option);
+        }
+        label.append(caption,select);
+        settings.appendChild(label);
+        return select;
+      }
+      const speedOptions = [
+        {value:0.5,label:'0.5×'},{value:0.75,label:'0.75×'},{value:1,label:'عادي'},
+        {value:1.25,label:'1.25×'},{value:1.5,label:'1.5×'},{value:1.75,label:'1.75×'},
+        {value:2,label:'2×'},{value:4,label:'4×'}
+      ];
+      const speedSelect = addSetting('سرعة التشغيل',speedOptions);
+      speedSelect.value = String(video.playbackRate || 1);
+      speedSelect.addEventListener('change',() => { video.playbackRate = Number(speedSelect.value); });
+      let qualitySelect = null;
+      let captionsSelect = null;
+      function refreshOptionalSettings() {
+        const engine = video.plyr;
+        const qualities = Array.isArray(engine?.options?.quality)
+          ? [...new Set(engine.options.quality.map(Number).filter(Number.isFinite))].sort((a,b) => a-b)
+          : [];
+        if (qualities.length > 1 && !qualitySelect) {
+          qualitySelect = addSetting('جودة الفيديو',qualities.map(value => ({value,label:value + 'p'})));
+          qualitySelect.addEventListener('change',() => {
+            try { if (video.plyr) video.plyr.quality = Number(qualitySelect.value); }
+            catch (_) {}
+          });
+        }
+        if (qualitySelect && engine) qualitySelect.value = String(engine.quality || qualities[qualities.length - 1]);
+
+        const tracks = Array.from(video.textTracks || []);
+        if (tracks.length && !captionsSelect) {
+          const captionOptions = [{value:'off',label:'إيقاف'}].concat(tracks.map((track,index) => ({
+            value:index,
+            label:track.label || track.language || ('ترجمة ' + (index + 1))
+          })));
+          captionsSelect = addSetting('الترجمة',captionOptions);
+          captionsSelect.addEventListener('change',() => {
+            for (let index = 0; index < tracks.length; index++) {
+              tracks[index].mode = captionsSelect.value === String(index) ? 'showing' : 'disabled';
+            }
+          });
+        }
+      }
+
+      let lastVolume = video.volume || 1;
+      function updatePlayState() {
+        const paused = video.paused || video.ended;
+        const icon = paused ? playPath : pausePath;
+        const label = paused ? 'تشغيل' : 'إيقاف مؤقت';
+        playButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + icon + '</svg>';
+        playButton.setAttribute('aria-label',label);
+        playButton.title = label;
+        centerButton.hidden = !paused;
+        player.classList.toggle('akwam-player-playing',!paused);
+      }
+      function updateVolume() {
+        const muted = video.muted || video.volume === 0;
+        const icon = muted
+          ? '<path d="M4 9v6h4l5 4V5L8 9H4Z" fill="currentColor" stroke="none"/><path d="M16 9l5 6m0-6-5 6"/>'
+          : '<path d="M4 9v6h4l5 4V5L8 9H4Z" fill="currentColor" stroke="none"/><path d="M16 9a5 5 0 0 1 0 6m2-9a9 9 0 0 1 0 12"/>';
+        muteButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + icon + '</svg>';
+        muteButton.setAttribute('aria-label',muted ? 'تشغيل الصوت' : 'كتم الصوت');
+        muteButton.title = muted ? 'تشغيل الصوت' : 'كتم الصوت';
+        muteButton.setAttribute('aria-pressed',String(muted));
+        volumeRange.value = muted ? '0' : String(video.volume);
+        if (!muted && video.volume > 0) lastVolume = video.volume;
+      }
+      function updateFullscreenState() {
+        const active = player.classList.contains('akwam-immersive-player');
+        const label = active ? 'إنهاء ملء الشاشة' : 'ملء الشاشة';
+        fullscreenButton.setAttribute('aria-label',label);
+        fullscreenButton.setAttribute('aria-pressed',String(active));
+        fullscreenButton.title = label;
+      }
+      function formatTime(value) {
+        if (!Number.isFinite(value) || value < 0) return '00:00';
+        const seconds = Math.floor(value);
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor(seconds / 60) % 60;
+        const remainder = seconds % 60;
+        const pad = number => String(number).padStart(2,'0');
+        return hours ? hours + ':' + pad(minutes) + ':' + pad(remainder) : minutes + ':' + pad(remainder);
+      }
+      function updateProgress() {
+        const duration = video.duration;
+        const fraction = Number.isFinite(duration) && duration > 0 ? Math.max(0,Math.min(1,video.currentTime / duration)) : 0;
+        seek.value = String(Math.round(fraction * 1000));
+        seek.style.setProperty('--akwam-progress',(fraction * 100) + '%');
+        time.textContent = formatTime(video.currentTime) + ' / ' + formatTime(duration);
+      }
+      function togglePlayback() {
+        if (video.paused || video.ended) {
+          try { const playback = video.play(); if (playback?.catch) playback.catch(() => {}); }
+          catch (_) {}
+        } else {
+          video.pause();
+        }
+      }
+      function closeSettings() {
+        settings.hidden = true;
+        settingsButton.setAttribute('aria-expanded','false');
+      }
+
+      settingsButton.addEventListener('click',() => {
+        settings.hidden = !settings.hidden;
+        settingsButton.setAttribute('aria-expanded',String(!settings.hidden));
+        if (!settings.hidden) refreshOptionalSettings();
+      });
+      playButton.addEventListener('click',togglePlayback);
+      centerButton.addEventListener('click',event => { event.stopPropagation(); togglePlayback(); });
+      muteButton.addEventListener('click',() => {
+        if (video.muted || video.volume === 0) {
+          video.muted = false;
+          if (video.volume === 0) video.volume = lastVolume || 1;
+        } else {
+          lastVolume = video.volume || 1;
+          video.muted = true;
+        }
+      });
+      volumeRange.addEventListener('input',() => {
+        const value = Number(volumeRange.value);
+        video.volume = value;
+        video.muted = value === 0;
+        if (value > 0) lastVolume = value;
+      });
+      seek.addEventListener('input',() => {
+        if (Number.isFinite(video.duration) && video.duration > 0) {
+          video.currentTime = video.duration * Number(seek.value) / 1000;
+          updateProgress();
+        }
+      });
+      fullscreenButton.addEventListener('click',() => {
+        setImmersive(player,!player.classList.contains('akwam-immersive-player'),true);
+      });
+      const pipAvailable = Boolean(document.pictureInPictureEnabled && typeof video.requestPictureInPicture === 'function');
+      pipButton.addEventListener('click',async () => {
+        try {
+          if (document.pictureInPictureElement === video) await document.exitPictureInPicture();
+          else await video.requestPictureInPicture();
+        } catch (_) {}
+      });
+      player.addEventListener('click',event => {
+        if (!settings.contains(event.target) && !settingsButton.contains(event.target)) closeSettings();
+      });
+      player.addEventListener('keydown',event => {
+        if (event.target?.closest?.('button,input,select')) return;
+        if (event.code === 'Space' || event.key === 'k') { event.preventDefault(); togglePlayback(); }
+        else if (event.key === 'ArrowRight') { event.preventDefault(); video.currentTime = Math.min(video.duration || 0,video.currentTime + 10); }
+        else if (event.key === 'ArrowLeft') { event.preventDefault(); video.currentTime = Math.max(0,video.currentTime - 10); }
+      });
+
+      ui.append(heading,center,controls,settings);
+      player.appendChild(ui);
+      if (!pipAvailable) pipButton.remove();
+      refreshOptionalSettings();
+      updatePlayState();
+      updateVolume();
+      updateProgress();
+      updateFullscreenState();
+
+      let hideTimer = 0;
+      function revealControls() {
+        player.classList.remove('akwam-controls-hidden');
+        clearTimeout(hideTimer);
+        if (!video.paused) hideTimer = setTimeout(() => player.classList.add('akwam-controls-hidden'),2800);
+      }
+      player.addEventListener('pointermove',revealControls,{passive:true});
+      player.addEventListener('pointerdown',revealControls,{passive:true});
+      for (const eventName of ['play','playing']) video.addEventListener(eventName,() => { updatePlayState(); revealControls(); });
+      video.addEventListener('pause',() => { updatePlayState(); revealControls(); });
+      video.addEventListener('ended',updatePlayState);
+      for (const eventName of ['timeupdate','loadedmetadata','durationchange','seeked']) video.addEventListener(eventName,updateProgress);
+      video.addEventListener('volumechange',updateVolume);
+      video.addEventListener('ratechange',() => { speedSelect.value = String(video.playbackRate); });
+      video.addEventListener('loadedmetadata',refreshOptionalSettings);
+      revealControls();
+    }
+
     function watchVideo(video) {
-      if (video.tagName !== "VIDEO" || attachedVideos.has(video)) return;
+      if (video.tagName !== "VIDEO") return;
+      installCustomPlayer(video);
+      if (attachedVideos.has(video)) return;
       attachedVideos.add(video);
       for (const eventName of ["durationchange","seeked","play","playing"]) {
         video.addEventListener(eventName, () => skipEpisodeIntro(video));
@@ -353,9 +670,14 @@ const bootstrapScript = String.raw`(() => {
     watchVideos(document.documentElement);
     new MutationObserver(records => {
       for (const record of records) {
+        if (record.type === "attributes") {
+          const player = record.target.closest?.(".plyr");
+          if (player) watchVideos(player);
+          continue;
+        }
         for (const node of record.addedNodes) watchVideos(node);
       }
-    }).observe(document.documentElement, {subtree:true,childList:true});
+    }).observe(document.documentElement, {subtree:true,childList:true,attributes:true,attributeFilter:["class"]});
   }
   function installMobileSearch() {
     const row = document.querySelector('.main-header .row');
