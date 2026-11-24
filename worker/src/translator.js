@@ -106,6 +106,12 @@ export const translatorScript = String.raw`(() => {
         if (!response.ok) {
           const error = new Error('Translation service returned ' + response.status);
           error.status = response.status;
+          const retryAfterHeader = response.headers?.get?.('Retry-After') || '';
+          const retryAfterSeconds = Number(retryAfterHeader);
+          const retryAfterDate = Date.parse(retryAfterHeader);
+          error.retryAfter = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+            ? retryAfterSeconds
+            : Number.isFinite(retryAfterDate) ? Math.max(0, Math.ceil((retryAfterDate - Date.now()) / 1000)) : 0;
           throw error;
         }
         const result = await response.json();
@@ -126,7 +132,8 @@ export const translatorScript = String.raw`(() => {
         report('translation-error', {
           message:String(error.message || 'Translation failed'),
           status,
-          retryable:!status || status >= 500
+          retryable:!status || status === 429 || status >= 500,
+          retryAfter:Number(error.retryAfter) || 0
         });
         break;
       }
@@ -152,7 +159,7 @@ export const translatorScript = String.raw`(() => {
     pieces.forEach((piece, index) => enqueue(piece.text, value => {
       outputs[index] = value + piece.trailing;
       remaining -= 1;
-      if (remaining === 0 && node.isConnected) {
+      if (remaining === 0 && node.isConnected && textRecords.get(node) === record && node.nodeValue === source) {
         record.translated = outputs.join('').trim();
         node.nodeValue = leading + outputs.join('').trim() + trailing;
       }
