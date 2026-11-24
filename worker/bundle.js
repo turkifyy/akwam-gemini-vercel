@@ -186,7 +186,10 @@ const bootstrapScript = String.raw`(() => {
     const attachedVideos = new WeakSet();
     const adBreakVideos = new WeakSet();
     const adBreakStates = new WeakMap();
-    const autoplayAttempted = new WeakSet();
+    const autoplayPending = new WeakSet();
+    const autoplayStarted = new WeakSet();
+    const introSkipPending = new WeakSet();
+    const introSkipAttempted = new WeakSet();
     const advancedVideos = new WeakSet();
     const adBreakIntervalSeconds = 10 * 60;
     const adBreakDurationSeconds = 15;
@@ -343,31 +346,53 @@ const bootstrapScript = String.raw`(() => {
     }, true);
 
     function skipEpisodeIntro(video) {
-      if (video.readyState < 1) return;
+      if (video.readyState < 2 || video.seeking || introSkipPending.has(video) || introSkipAttempted.has(video)) return;
       const duration = video.duration;
       if (Number.isFinite(duration) && duration > 85 && video.currentTime < 85) {
+        introSkipPending.add(video);
+        introSkipAttempted.add(video);
         try {
-          video.currentTime = 85;
-        } catch (_) {}
+          if (typeof video.fastSeek === 'function') video.fastSeek(85);
+          else video.currentTime = 85;
+        } catch (_) {
+          try { video.currentTime = 85; }
+          catch (_) {
+            introSkipPending.delete(video);
+            introSkipAttempted.delete(video);
+          }
+        }
       }
     }
 
     function autoplayEpisode(video) {
-      if (video.readyState < 1 || autoplayAttempted.has(video)) return;
-      autoplayAttempted.add(video);
-      const playMuted = () => {
-        video.muted = true;
+      if (video.readyState < 2 || autoplayStarted.has(video) || autoplayPending.has(video)) return;
+      if (video.paused === false) {
+        autoplayStarted.add(video);
+        return;
+      }
+      autoplayPending.add(video);
+      const finish = started => {
+        autoplayPending.delete(video);
+        if (started) autoplayStarted.add(video);
+      };
+      const attempt = mutedFallback => {
+        if (mutedFallback) video.muted = true;
         try {
           const playback = video.play();
-          if (playback && typeof playback.catch === "function") playback.catch(() => {});
-        } catch (_) {}
+          if (playback && typeof playback.then === 'function') {
+            playback.then(() => finish(true), () => {
+              if (!video.muted) attempt(true);
+              else finish(false);
+            });
+          } else {
+            finish(true);
+          }
+        } catch (_) {
+          if (!video.muted) attempt(true);
+          else finish(false);
+        }
       };
-      try {
-        const playback = video.play();
-        if (playback && typeof playback.catch === "function") playback.catch(playMuted);
-      } catch (_) {
-        playMuted();
-      }
+      attempt(false);
     }
 
     function installAdBreak(video) {
@@ -836,9 +861,27 @@ const bootstrapScript = String.raw`(() => {
       installAdBreak(video);
       if (attachedVideos.has(video)) return;
       attachedVideos.add(video);
-      for (const eventName of ["durationchange","seeked","play","playing"]) {
+      video.addEventListener("seeking", () => {
+        if (!introSkipPending.has(video) && video.currentTime < 85) introSkipAttempted.delete(video);
+      });
+      video.addEventListener("seeked", () => {
+        introSkipPending.delete(video);
+        skipEpisodeIntro(video);
+        autoplayEpisode(video);
+      });
+      for (const eventName of ["durationchange","play","playing"]) {
         video.addEventListener(eventName, () => skipEpisodeIntro(video));
       }
+      for (const eventName of ["loadeddata","canplay"]) {
+        video.addEventListener(eventName, () => {
+          skipEpisodeIntro(video);
+          autoplayEpisode(video);
+        });
+      }
+      video.addEventListener("playing", () => {
+        autoplayPending.delete(video);
+        autoplayStarted.add(video);
+      });
       video.addEventListener("timeupdate", () => advanceEpisode(video));
       video.addEventListener("ended", () => advanceEpisode(video, true));
       video.addEventListener("loadedmetadata", () => {
