@@ -662,6 +662,52 @@ test('translation accepts only the configured site origin in addition to the Wor
   assert.equal(denied.status, 403);
 });
 
+test('site proxy removes click-overlay ad scripts while preserving regular assets', async t => {
+  const originalFetch = globalThis.fetch;
+  const originalRewriter = globalThis.HTMLRewriter;
+  const handlers = new Map();
+  globalThis.fetch = async () => new Response('<html></html>', {headers:{'content-type':'text/html'}});
+  globalThis.HTMLRewriter = class {
+    on(selector, handler) { handlers.set(selector, handler); return this; }
+    transform(response) { return response; }
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    globalThis.HTMLRewriter = originalRewriter;
+  });
+
+  const response = await worker.fetch(new Request(workerUrl + '/site/en/series'), {UPSTREAM_HOST:'akwam.ss'});
+  assert.equal(response.status, 200);
+  const rewriteSrc = handlers.get('[src]').element;
+  const element = (tagName, src) => {
+    const attributes = {src};
+    return {
+      tagName,
+      attributes,
+      removed:false,
+      getAttribute(name) { return attributes[name] ?? null; },
+      setAttribute(name,value) { attributes[name] = String(value); },
+      remove() { this.removed = true; }
+    };
+  };
+
+  for (const host of ['aarems.org','mamshirt.com']) {
+    const adScript = element('SCRIPT', 'https://' + host + '/ad.js');
+    rewriteSrc(adScript);
+    assert.equal(adScript.removed, true);
+  }
+
+  const siteScript = element('SCRIPT', 'https://akwam.ss/style/assets/js/akwam.js');
+  rewriteSrc(siteScript);
+  assert.equal(siteScript.removed, false);
+  assert.equal(siteScript.attributes.src, workerUrl + '/site/en/style/assets/js/akwam.js');
+
+  const adImage = element('IMG', 'https://aarems.org/banner.png');
+  rewriteSrc(adImage);
+  assert.equal(adImage.removed, false);
+  assert.equal(adImage.attributes.src, 'https://aarems.org/banner.png');
+});
+
 test('site proxy stays on the configured upstream and permits only the configured frame parent', async t => {
   const originalFetch = globalThis.fetch;
   const originalRewriter = globalThis.HTMLRewriter;
