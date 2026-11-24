@@ -172,6 +172,65 @@ function createPosterHarness({href,lang='en',alt,translation}) {
   return {image,host,get label() { return label; }};
 }
 
+function createTextHarness({source,fetch:fetchTranslation}) {
+  const node = {
+    nodeType:3,
+    nodeValue:source,
+    parentElement:{tagName:'DIV',closest() { return null; }},
+    isConnected:true
+  };
+  const reports = [];
+  let onMutation = () => {};
+  const root = {
+    nodeType:1,
+    tagName:'HTML',
+    hasAttribute() { return false; },
+    querySelectorAll() { return []; }
+  };
+  const document = {
+    documentElement:root,
+    head:{appendChild() {}},
+    getElementById() { return null; },
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+    createElement(tagName) { return {tagName,id:'',textContent:'',setAttribute() {}}; },
+    createTreeWalker() {
+      let visited = false;
+      return {nextNode() { if (visited) return null; visited = true; return node; }};
+    },
+    addEventListener() {}
+  };
+  runInNewContext(translatorScript, {
+    window:{
+      __AKWAM_BRIDGE__:{lang:'en',post(type,details) { reports.push({type,...details}); }},
+      addEventListener() {}
+    },
+    document,
+    location:{href:workerUrl + '/site/en/series'},
+    URL,
+    localStorage:{getItem() { return null; },setItem() {}},
+    sessionStorage:{getItem() { return null; },setItem() {},removeItem() {}},
+    fetch:fetchTranslation,
+    setTimeout,
+    clearTimeout,
+    MutationObserver:class {
+      constructor(callback) { onMutation = callback; }
+      observe() {}
+    },
+    Node:{TEXT_NODE:3,ELEMENT_NODE:1},
+    NodeFilter:{SHOW_TEXT:4},
+    innerHeight:600
+  });
+  return {
+    node,
+    reports,
+    updateText(value) {
+      node.nodeValue = value;
+      onMutation([{type:'characterData',target:node}]);
+    }
+  };
+}
+
 function createNavigationHarness(script,{country,language}) {
   const categories = ['turkish','indian','korean','foreign'];
   const buttons = categories.map(category => {
@@ -287,6 +346,42 @@ test('poster labels show source immediately and update to the selected language'
   assert.equal(harness.image.getAttribute('alt'), 'حب متنكر');
 });
 
+test('a late translation does not overwrite text that changed while the request was in flight', async () => {
+  const requests = [];
+  const harness = createTextHarness({
+    source:'Old title',
+    fetch:async (_url,init) => new Promise(resolve => {
+      requests.push({texts:JSON.parse(init.body).texts,resolve});
+    })
+  });
+  await new Promise(resolve => setTimeout(resolve,140));
+  assert.equal(requests.length, 1);
+  harness.updateText('New title');
+  requests[0].resolve({ok:true,json:async() => ({translations:['Old translation']})});
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requests.length, 2);
+  assert.equal(harness.node.nodeValue, 'New title');
+  requests[1].resolve({ok:true,json:async() => ({translations:['New translation']})});
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(harness.node.nodeValue, 'New translation');
+});
+
+test('a 429 translation error is retryable and preserves the server retry delay', async () => {
+  const harness = createTextHarness({
+    source:'Hello',
+    fetch:async () => ({
+      ok:false,
+      status:429,
+      headers:new Headers({'Retry-After':'60'})
+    })
+  });
+  await new Promise(resolve => setTimeout(resolve,140));
+  const error = harness.reports.find(report => report.type === 'translation-error');
+  assert.equal(error.status, 429);
+  assert.equal(error.retryable, true);
+  assert.equal(error.retryAfter, 60);
+});
+
 test('navigation labels follow the detected language and set the matching direction', async () => {
   const page = await readFile(new URL('../../site/index.html', import.meta.url), 'utf8');
   const script = page.match(/<script>\s*([\s\S]*?)\s*<\/script>/)?.[1];
@@ -344,6 +439,19 @@ test('retry preserves the detail page and the active category returns to its lis
   const newArchive = harness.frame.src;
   harness.buttons[1].click();
   assert.equal(harness.frame.src, newArchive);
+});
+
+test('a translation rate limit waits for the server-provided retry delay', async () => {
+  const page = await readFile(new URL('../../site/index.html', import.meta.url), 'utf8');
+  const script = page.slice(page.indexOf('<script>') + 8, page.lastIndexOf('</script>'));
+  const harness = createNavigationHarness(script,{country:'US',language:'en'});
+  await new Promise(resolve => setTimeout(resolve,0));
+  harness.windowListeners.get('message')({
+    origin:workerUrl,
+    source:harness.frame.contentWindow,
+    data:{source:'akwam-gemini-bridge',type:'translation-error',retryable:true,status:429,retryAfter:60}
+  });
+  assert.equal([...harness.timers.values()].some(timer => timer.delay === 60000), true);
 });
 
 test('auto-pagination waits 7 seconds at the bottom and cancels if the user scrolls away', () => {
@@ -430,8 +538,7 @@ test('external popups are blocked while internal opens navigate in-frame', async
   assert.equal(assignments.length, 1);
 
   const page = await readFile(new URL('../../site/index.html', import.meta.url), 'utf8');
-  assert.match(page, /sandbox="allow-scripts allow-same-origin allow-forms"/);
-  assert.doesNotMatch(page, /allow-popups/);
+  assert.match(page, /sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"/);
 });
 
 test('visitor endpoint uses Cloudflare country without sharing the visitor IP', async t => {
@@ -506,6 +613,20 @@ test('translation returns a client-safe error for a null Gemini response', async
   const response = await worker.fetch(request, {GEMINI_API_KEY:'test-secret'});
   assert.equal(response.status, 502);
   assert.deepEqual(await response.json(), {error:'Gemini returned an incomplete translation'});
+});
+
+test('translation rate limits tell the browser when to retry', async () => {
+  const request = new Request(workerUrl + '/api/translate', {
+    method:'POST',
+    headers:{Origin:workerUrl,'Content-Type':'application/json'},
+    body:JSON.stringify({targetLang:'ar',texts:['Hello']})
+  });
+  const response = await worker.fetch(request, {
+    GEMINI_API_KEY:'test-secret',
+    TRANSLATION_LIMITER:{limit:async () => ({success:false})}
+  });
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get('Retry-After'), '60');
 });
 
 test('translation rejects oversized and malformed batches before calling Gemini', async () => {

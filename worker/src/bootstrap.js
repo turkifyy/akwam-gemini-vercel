@@ -12,7 +12,9 @@ export const bootstrapScript = String.raw`(() => {
   const episodePage = /^\/episode\/\d+(?:\/|$)/.test(pagePath);
   const seriesPage = /^\/series\/\d+(?:\/|$)/.test(pagePath);
   const prefix = location.origin + routePath;
+  const adLinkUrl = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
   const originalFetch = window.fetch.bind(window);
+  const originalOpen = typeof window.open === 'function' ? window.open.bind(window) : () => null;
 
   function internal(path) {
     return path === '/health' || path.startsWith('/api/') || path.startsWith('/__bridge/');
@@ -60,6 +62,9 @@ export const bootstrapScript = String.raw`(() => {
     try {
       const destination = new URL(String(url), location.href);
       if (destination.protocol !== 'http:' && destination.protocol !== 'https:') return null;
+      if (destination.href === adLinkUrl && String(target || '').toLowerCase() === '_blank') {
+        return originalOpen(destination.href, '_blank', 'noopener,noreferrer');
+      }
       const routed = new URL(proxyUrl(destination.href), location.href);
       const internalPath = routePath;
       const isInternal = routed.origin === location.origin &&
@@ -184,7 +189,14 @@ export const bootstrapScript = String.raw`(() => {
     const advancedVideos = new WeakSet();
     const adBreakIntervalSeconds = 10 * 60;
     const adBreakDurationSeconds = 15;
-    const adLinkUrl = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
+    document.addEventListener('click', event => {
+      const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
+      const link = target?.closest?.('a[target="_blank"]');
+      if (!link) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (link.getAttribute('href') === adLinkUrl) window.open(adLinkUrl, '_blank');
+    }, true);
     let nextEpisodeUrl = '';
     let nextEpisodeResolved = false;
 
