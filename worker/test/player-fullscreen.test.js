@@ -17,6 +17,7 @@ function createClassList() {
   const values = new Set();
   return {
     contains(name) { return values.has(name); },
+    add(name) { values.add(name); },
     toggle(name, force) {
       const active = force === undefined ? !values.has(name) : Boolean(force);
       if (active) values.add(name);
@@ -29,6 +30,7 @@ function createClassList() {
 function runWatchPage(episode, sessionStorage = createStorage()) {
   const messages = [];
   const listeners = new Map();
+  const intervals = [];
   const mobileSearchStyles = [];
   const searchToggle = {clickCount:0,click() { this.clickCount += 1; }};
   const searchInput = {focused:false,focus() { this.focused = true; }};
@@ -54,18 +56,25 @@ function runWatchPage(episode, sessionStorage = createStorage()) {
   };
   const player = {
     classList:playerClassList,
+    children:[],
+    appendChild(element) { this.children.push(element); element.parentElement = this; return element; },
     querySelector(selector) { return selector === 'button[data-plyr="fullscreen"]' ? button : null; }
   };
   const videoListeners = new Map();
   const video = {
     nodeType:1,
     tagName:'VIDEO',
-    readyState:1,
+    readyState:4,
     duration:1800,
     currentTime:0,
     muted:false,
+    paused:false,
+    ended:false,
+    playCalls:0,
+    pauseCalls:0,
     closest(selector) { return selector === '.plyr' ? player : null; },
-    play() { return Promise.resolve(); },
+    play() { this.paused = false; this.playCalls++; return Promise.resolve(); },
+    pause() { this.paused = true; this.pauseCalls++; },
     addEventListener(name, callback) {
       const callbacks = videoListeners.get(name) || [];
       callbacks.push(callback);
@@ -89,12 +98,17 @@ function runWatchPage(episode, sessionStorage = createStorage()) {
     documentElement:root,
     head:{appendChild(element) { mobileSearchStyles.push(element); }},
     createElement(tagName) {
-      const element = {
-        tagName,textContent:'',attributes:{},listeners:{},
+      return {
+        tagName,className:'',textContent:'',attributes:{},listeners:{},children:[],
         setAttribute(name,value) { this.attributes[name] = String(value); },
-        addEventListener(name,callback) { this.listeners[name] = callback; }
+        addEventListener(name,callback) { this.listeners[name] = callback; },
+        appendChild(element) { this.children.push(element); element.parentElement = this; return element; },
+        remove() {
+          const index = this.parentElement?.children?.indexOf(this) ?? -1;
+          if (index >= 0) this.parentElement.children.splice(index,1);
+          this.parentElement = null;
+        }
       };
-      return element;
     },
     querySelector(selector) {
       if (selector === '.main-header .row') return searchRow;
@@ -131,11 +145,12 @@ function runWatchPage(episode, sessionStorage = createStorage()) {
   const context = {
     window,document,location,sessionStorage,localStorage:createStorage(),
     XMLHttpRequest,history:{pushState() {},replaceState() {}},MutationObserver,
-    URL,Request,console
+    URL,Request,console,
+    setInterval(callback,delay) { const timer = {callback,delay}; intervals.push(timer); return timer; }
   };
 
   vm.runInNewContext(bootstrapScript, context);
-  return {player,button,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile};
+  return {player,button,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video};
 }
 
 function clickFullscreen(page) {
@@ -191,6 +206,47 @@ test('old series-wide dismissal does not block automatic mode', () => {
   sessionStorage.setItem('akwam-immersive-dismissed-v1:5744', '1');
   const page = runWatchPage(3, sessionStorage);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+});
+
+test('ad break pauses at the exact position and resumes after five seconds', () => {
+  const page = runWatchPage(1);
+  const tick = page.intervals.find(timer => timer.delay === 1000).callback;
+  page.video.currentTime = 612.375;
+  for (let second = 0; second < 600; second++) tick();
+
+  const overlay = page.player.children.find(element => element.className === 'akwam-ad-break');
+  assert.ok(overlay);
+  const [adFrame,countdown] = overlay.children;
+  assert.equal(adFrame.src, 'https://aarems.org/1/962ae41308332ad6376e83c9183edfbc');
+  assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-same-origin allow-forms');
+  assert.match(countdown.textContent, /5 ثوانٍ$/);
+  assert.equal(page.video.paused, true);
+  assert.equal(page.video.pauseCalls, 1);
+
+  for (let second = 0; second < 4; second++) tick();
+  assert.ok(page.player.children.includes(overlay));
+  assert.match(countdown.textContent, /1 ثوانٍ$/);
+  tick();
+
+  assert.equal(page.player.children.includes(overlay), false);
+  assert.equal(adFrame.src, 'about:blank');
+  assert.equal(page.video.currentTime, 612.375);
+  assert.equal(page.video.paused, false);
+  assert.equal(page.video.playCalls, 2);
+});
+
+test('paused time does not count toward the next ad break', () => {
+  const page = runWatchPage(1);
+  const tick = page.intervals.find(timer => timer.delay === 1000).callback;
+  page.video.paused = true;
+  for (let second = 0; second < 1200; second++) tick();
+  assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), false);
+
+  page.video.paused = false;
+  for (let second = 0; second < 599; second++) tick();
+  assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), false);
+  tick();
+  assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), true);
 });
 
 test('manual toggle can re-enable immersive mode', () => {
