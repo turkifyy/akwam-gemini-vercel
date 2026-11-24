@@ -3,7 +3,7 @@ import {test} from "node:test";
 import vm from "node:vm";
 import {bootstrapScript} from "../src/bootstrap.js";
 
-function makeVideo({duration = 1850, currentTime = 0, readyState = 1, source = "episode.mp4"} = {}) {
+function makeVideo({duration = 1850, currentTime = 0, readyState = 2, source = "episode.mp4"} = {}) {
   const listeners = new Map();
   return {
     nodeType:1,
@@ -13,10 +13,17 @@ function makeVideo({duration = 1850, currentTime = 0, readyState = 1, source = "
     duration,
     currentTime,
     readyState,
+    paused:true,
+    seeking:false,
     muted:false,
     playCalls:0,
+    fastSeekCalls:0,
+    fastSeek(time) {
+      this.fastSeekCalls++;
+      this.currentTime = time;
+    },
     closest() { return null; },
-    play() { this.playCalls++; return Promise.resolve(); },
+    play() { this.playCalls++; this.paused = false; return Promise.resolve(); },
     addEventListener(name, listener) {
       const callbacks = listeners.get(name) || [];
       callbacks.push(listener);
@@ -61,17 +68,22 @@ function runBootstrap(pathname, videos = []) {
   return observers;
 }
 
-test("episode playback skips exactly 85 seconds and autoplays", () => {
+test("episode playback skips the intro once and autoplays", () => {
   const video = makeVideo();
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
   assert.equal(video.currentTime, 85);
+  assert.equal(video.fastSeekCalls, 1);
   assert.equal(video.playCalls, 1);
+
+  for (const event of ["durationchange","seeked","play","playing"]) video.emit(event);
+  assert.equal(video.fastSeekCalls, 1);
 });
 
 test("saved playback positions are preserved", () => {
   const video = makeVideo({currentTime:120});
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
   assert.equal(video.currentTime, 120);
+  assert.equal(video.fastSeekCalls, 0);
   assert.equal(video.playCalls, 1);
 });
 
@@ -79,6 +91,7 @@ test("clips up to 85 seconds are not skipped and still autoplay", () => {
   const video = makeVideo({duration:85});
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
   assert.equal(video.currentTime, 0);
+  assert.equal(video.fastSeekCalls, 0);
   assert.equal(video.playCalls, 1);
 });
 
@@ -89,12 +102,19 @@ test("movie pages are not affected", () => {
   assert.equal(video.playCalls, 0);
 });
 
-test("the skip waits for video metadata", () => {
+test("intro skip and autoplay wait until frame data is available", () => {
   const video = makeVideo({readyState:0});
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
   assert.equal(video.currentTime, 0);
+  assert.equal(video.playCalls, 0);
+
   video.readyState = 1;
   video.emit("loadedmetadata");
+  assert.equal(video.currentTime, 0);
+  assert.equal(video.playCalls, 0);
+
+  video.readyState = 2;
+  video.emit("loadeddata");
   assert.equal(video.currentTime, 85);
   assert.equal(video.playCalls, 1);
 });
@@ -107,14 +127,25 @@ test("videos inserted after page load are handled", () => {
   assert.equal(video.playCalls, 1);
 });
 
-test("player resets to the intro are corrected before playback", () => {
+test("a later seek back to the intro is corrected", () => {
   const video = makeVideo();
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
+  video.emit("seeking");
+  video.emit("seeked");
+
   video.currentTime = 0;
+  video.seeking = true;
+  video.emit("seeking");
+  video.seeking = false;
   video.emit("seeked");
   assert.equal(video.currentTime, 85);
-  video.currentTime = 0;
-  video.emit("play");
+  assert.equal(video.fastSeekCalls, 2);
+});
+
+test("currentTime is used when fastSeek is unavailable", () => {
+  const video = makeVideo();
+  delete video.fastSeek;
+  runBootstrap("/site/en/watch/185231/105666/episode", [video]);
   assert.equal(video.currentTime, 85);
 });
 
@@ -128,4 +159,19 @@ test("rejected autoplay retries muted", async () => {
   await Promise.resolve();
   assert.equal(video.playCalls, 2);
   assert.equal(video.muted, true);
+});
+
+test("a failed muted autoplay can retry when the player becomes ready", async () => {
+  const video = makeVideo();
+  video.play = () => {
+    video.playCalls++;
+    return Promise.reject(new Error("Playback not ready"));
+  };
+  runBootstrap("/site/en/watch/185231/105666/episode", [video]);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(video.playCalls, 2);
+
+  video.emit("canplay");
+  assert.equal(video.playCalls, 3);
 });
