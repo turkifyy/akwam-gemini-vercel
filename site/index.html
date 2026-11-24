@@ -510,13 +510,13 @@
         root.style.setProperty('--skip-height', skipHeight + 'px');
       }
     }
-      if (data.type === 'translation-error') {
-        if (data.retryable !== true) {
-          console.error('Gemini translation failed:', data.message || 'Unknown error');
-          return;
-        }
-        if (Number(data.status) === 429) return;
-        if (translationRetryCount < 3) {
+    if (data.type === 'translation-error') {
+      if (data.retryable !== true) {
+        console.error('Gemini translation failed:', data.message || 'Unknown error');
+        return;
+      }
+      if (Number(data.status) === 429) return;
+      if (translationRetryCount < 3) {
         const retryAfter = Number(data.retryAfter) * 1000;
         const delay = Math.max(1500 * 2 ** translationRetryCount, Math.min(60000, retryAfter || 0));
         translationRetryCount += 1;
