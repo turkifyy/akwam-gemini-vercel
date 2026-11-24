@@ -103,7 +103,7 @@
     <iframe
       id="site-frame"
       title="المسلسلات المعروضة داخل Turkify Series"
-      sandbox="allow-scripts allow-same-origin allow-forms"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
       referrerpolicy="strict-origin-when-cross-origin"
       allow="fullscreen"
       allowfullscreen></iframe>
@@ -515,8 +515,10 @@
         console.error('Gemini translation failed:', data.message || 'Unknown error');
         return;
       }
+      if (Number(data.status) === 429) return;
       if (translationRetryCount < 3) {
-        const delay = 1500 * 2 ** translationRetryCount;
+        const retryAfter = Number(data.retryAfter) * 1000;
+        const delay = Math.max(1500 * 2 ** translationRetryCount, Math.min(60000, retryAfter || 0));
         translationRetryCount += 1;
         const revision = languageRevision;
         translationRetryTimer = setTimeout(() => {

@@ -159,6 +159,8 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
   const window = {
     __AKWAM_BRIDGE__:{lang:'en',parentOrigin:'https://parent.example',upstreamHost:'akwam.ss'},
     fetch:() => Promise.resolve(),
+    openCalls:[],
+    open(...args) { this.openCalls.push(args); return {}; },
     parent:{postMessage(message, target) { messages.push({message,target}); }}
   };
   class MutationObserver { observe() {} }
@@ -172,7 +174,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
 
   vm.runInNewContext(bootstrapScript, context);
   for (const callback of videoListeners.get('seeked') || []) callback();
-  return {player,button,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners,navigation};
+  return {player,button,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners,navigation,window};
 }
 
 function clickFullscreen(page) {
@@ -234,7 +236,34 @@ test('old series-wide dismissal does not block automatic mode', () => {
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
 });
 
-test('ad break pauses at the exact position and resumes after five seconds', () => {
+test('only the sponsored fullscreen link can open an external popup', () => {
+  const page = runWatchPage(1);
+  const click = href => {
+    const link = {getAttribute(name) { return name === 'href' ? href : null; }};
+    const event = {
+      target:{nodeType:1,closest(selector) { return selector === 'a[target="_blank"]' ? link : null; }},
+      prevented:false,
+      stopped:false,
+      preventDefault() { this.prevented = true; },
+      stopImmediatePropagation() { this.stopped = true; }
+    };
+    for (const listener of page.listeners.get('click') || []) listener(event);
+    return event;
+  };
+  const adUrl = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
+  const adClick = click(adUrl);
+  assert.equal(adClick.prevented, true);
+  assert.equal(page.window.openCalls.length, 1);
+  assert.equal(page.window.openCalls[0][0], adUrl);
+  assert.equal(page.window.openCalls[0][1], '_blank');
+
+  const externalClick = click('https://unapproved.example/');
+  assert.equal(externalClick.prevented, true);
+  assert.equal(page.window.openCalls.length, 1);
+  assert.equal(page.window.open('https://unapproved.example/','_blank'), null);
+});
+
+test('fullscreen ad pauses at the exact position and resumes after fifteen seconds', () => {
   const page = runWatchPage(1);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
   page.video.currentTime = 590.375;
@@ -259,11 +288,13 @@ test('ad break pauses at the exact position and resumes after five seconds', () 
   assert.equal(adLink.attributes.target, '_blank');
   assert.equal(adLink.attributes.rel, 'sponsored noopener noreferrer');
   assert.equal(adLink.textContent, 'زيارة الإعلان');
-  assert.match(countdown.textContent, /5 ثوانٍ$/);
+  assert.match(countdown.textContent, /15 ثوانٍ$/);
   assert.equal(page.video.paused, true);
   assert.equal(page.video.pauseCalls, 1);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+  assert.match(page.mobileSearchStyles.map(style => style.textContent).join('\n'), /\.akwam-immersive-player>\.akwam-ad-break\{position:absolute!important;inset:0!important;z-index:2147483647!important\}/);
 
-  for (let second = 0; second < 4; second++) tick();
+  for (let second = 0; second < 14; second++) tick();
   assert.ok(page.player.children.includes(overlay));
   assert.match(countdown.textContent, /1 ثوانٍ$/);
   tick();
@@ -315,7 +346,7 @@ test('an episode ending at the ad mark waits for the ad before advancing', () =>
   assert.equal(page.navigation.length, 0);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
 
-  for (let second = 0; second < 4; second++) tick();
+  for (let second = 0; second < 14; second++) tick();
   assert.equal(page.navigation.length, 0);
   tick();
 

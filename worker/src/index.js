@@ -164,7 +164,7 @@ async function handleTranslate(request, env) {
   if (env.TRANSLATION_LIMITER) {
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
     const {success} = await env.TRANSLATION_LIMITER.limit({key:ip});
-    if (!success) return json({error:'Translation rate limit reached. Try again shortly.'}, 429);
+    if (!success) return json({error:'Translation rate limit reached. Try again shortly.'}, 429, new Headers({'Retry-After':'60'}));
   }
 
   const parsed = await readBoundedJson(request, MAX_BODY_BYTES);
@@ -201,7 +201,12 @@ async function handleTranslate(request, env) {
   } finally {
     clearTimeout(timeout);
   }
-  if (!geminiResponse.ok) return json({error:'Gemini request failed',status:geminiResponse.status}, geminiResponse.status === 429 ? 429 : 502);
+  if (!geminiResponse.ok) {
+    const headers = geminiResponse.status === 429
+      ? new Headers({'Retry-After':geminiResponse.headers.get('Retry-After') || '30'})
+      : new Headers();
+    return json({error:'Gemini request failed',status:geminiResponse.status}, geminiResponse.status === 429 ? 429 : 502, headers);
+  }
 
   let answer;
   try {

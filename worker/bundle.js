@@ -12,7 +12,9 @@ const bootstrapScript = String.raw`(() => {
   const episodePage = /^\/episode\/\d+(?:\/|$)/.test(pagePath);
   const seriesPage = /^\/series\/\d+(?:\/|$)/.test(pagePath);
   const prefix = location.origin + routePath;
+  const adLinkUrl = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
   const originalFetch = window.fetch.bind(window);
+  const originalOpen = typeof window.open === 'function' ? window.open.bind(window) : () => null;
 
   function internal(path) {
     return path === '/health' || path.startsWith('/api/') || path.startsWith('/__bridge/');
@@ -60,6 +62,9 @@ const bootstrapScript = String.raw`(() => {
     try {
       const destination = new URL(String(url), location.href);
       if (destination.protocol !== 'http:' && destination.protocol !== 'https:') return null;
+      if (destination.href === adLinkUrl && String(target || '').toLowerCase() === '_blank') {
+        return originalOpen(destination.href, '_blank', 'noopener,noreferrer');
+      }
       const routed = new URL(proxyUrl(destination.href), location.href);
       const internalPath = routePath;
       const isInternal = routed.origin === location.origin &&
@@ -183,8 +188,15 @@ const bootstrapScript = String.raw`(() => {
     const autoplayAttempted = new WeakSet();
     const advancedVideos = new WeakSet();
     const adBreakIntervalSeconds = 10 * 60;
-    const adBreakDurationSeconds = 5;
-    const adLinkUrl = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
+    const adBreakDurationSeconds = 15;
+    document.addEventListener('click', event => {
+      const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
+      const link = target?.closest?.('a[target="_blank"]');
+      if (!link) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (link.getAttribute('href') === adLinkUrl) window.open(adLinkUrl, '_blank');
+    }, true);
     let nextEpisodeUrl = '';
     let nextEpisodeResolved = false;
 
@@ -238,6 +250,7 @@ const bootstrapScript = String.raw`(() => {
       '.akwam-immersive-player button[data-plyr="fullscreen"] .icon--pressed,.akwam-immersive-player button[data-plyr="fullscreen"] .label--pressed{display:block!important}' +
       '.akwam-ad-supported:not(.akwam-immersive-player){position:relative!important}' +
       '.akwam-ad-break{position:absolute!important;inset:0!important;z-index:2147483646!important;display:grid!important;place-items:center!important;overflow:hidden!important;background:radial-gradient(circle at 50% 35%,#1b2740,#07090f 68%)!important}' +
+      '.akwam-immersive-player>.akwam-ad-break{position:absolute!important;inset:0!important;z-index:2147483647!important}' +
       '.akwam-ad-card{display:grid!important;justify-items:center!important;gap:14px!important;width:min(520px,calc(100% - 36px))!important;padding:32px!important;border:1px solid #ffffff2a!important;border-radius:24px!important;background:linear-gradient(145deg,#1c2435,#11141c)!important;box-shadow:0 24px 80px #000a!important;color:#fff!important;text-align:center!important;font:500 15px/1.5 system-ui,sans-serif!important;direction:rtl!important}' +
       '.akwam-ad-label{padding:5px 10px!important;border-radius:999px!important;background:#ffffff12!important;color:#d5f287!important;font-size:12px!important;font-weight:700!important}' +
       '.akwam-ad-title{margin:0!important;font-size:clamp(22px,3vw,32px)!important;line-height:1.25!important;font-weight:800!important}' +
@@ -1058,6 +1071,7 @@ const translatorScript = String.raw`(() => {
   const cache = new Map();
   const MAX_CHUNK = 700;
   let draining = false;
+  let retryTimer = 0;
   let translated = 0;
   let queued = 0;
 
@@ -1136,7 +1150,7 @@ const translatorScript = String.raw`(() => {
     callbacks.push(apply);
     pending.set(value, callbacks);
     queued += callbacks.length === 1 ? 1 : 0;
-    if (!draining) setTimeout(drain, 120);
+    if (!draining && !retryTimer) setTimeout(drain, 120);
   }
 
   async function drain() {
@@ -1154,6 +1168,12 @@ const translatorScript = String.raw`(() => {
         if (!response.ok) {
           const error = new Error('Translation service returned ' + response.status);
           error.status = response.status;
+          const retryAfterHeader = response.headers?.get?.('Retry-After') || '';
+          const retryAfterSeconds = Number(retryAfterHeader);
+          const retryAfterDate = Date.parse(retryAfterHeader);
+          error.retryAfter = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+            ? retryAfterSeconds
+            : Number.isFinite(retryAfterDate) ? Math.max(0, Math.ceil((retryAfterDate - Date.now()) / 1000)) : 0;
           throw error;
         }
         const result = await response.json();
@@ -1171,10 +1191,24 @@ const translatorScript = String.raw`(() => {
         report('translation-progress', {translated, queued, pending:pending.size});
       } catch (error) {
         const status = Number(error.status) || 0;
+        const retryable = !status || status === 429 || status >= 500;
+        if (status === 429) {
+          for (const [value, callbacks] of batch) {
+            const waiting = pending.get(value) || [];
+            pending.set(value, callbacks.concat(waiting));
+          }
+          const retryAfter = Number(error.retryAfter) * 1000;
+          const delay = Math.max(5000, Math.min(300000, retryAfter || 0));
+          retryTimer = setTimeout(() => {
+            retryTimer = 0;
+            drain();
+          }, delay);
+        }
         report('translation-error', {
           message:String(error.message || 'Translation failed'),
           status,
-          retryable:!status || status >= 500
+          retryable,
+          retryAfter:Number(error.retryAfter) || 0
         });
         break;
       }
@@ -1200,7 +1234,7 @@ const translatorScript = String.raw`(() => {
     pieces.forEach((piece, index) => enqueue(piece.text, value => {
       outputs[index] = value + piece.trailing;
       remaining -= 1;
-      if (remaining === 0 && node.isConnected) {
+      if (remaining === 0 && node.isConnected && textRecords.get(node) === record && node.nodeValue === source) {
         record.translated = outputs.join('').trim();
         node.nodeValue = leading + outputs.join('').trim() + trailing;
       }
@@ -1540,7 +1574,7 @@ async function handleTranslate(request, env) {
   if (env.TRANSLATION_LIMITER) {
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
     const {success} = await env.TRANSLATION_LIMITER.limit({key:ip});
-    if (!success) return json({error:'Translation rate limit reached. Try again shortly.'}, 429);
+    if (!success) return json({error:'Translation rate limit reached. Try again shortly.'}, 429, new Headers({'Retry-After':'60'}));
   }
 
   const parsed = await readBoundedJson(request, MAX_BODY_BYTES);
@@ -1577,7 +1611,12 @@ async function handleTranslate(request, env) {
   } finally {
     clearTimeout(timeout);
   }
-  if (!geminiResponse.ok) return json({error:'Gemini request failed',status:geminiResponse.status}, geminiResponse.status === 429 ? 429 : 502);
+  if (!geminiResponse.ok) {
+    const headers = geminiResponse.status === 429
+      ? new Headers({'Retry-After':geminiResponse.headers.get('Retry-After') || '30'})
+      : new Headers();
+    return json({error:'Gemini request failed',status:geminiResponse.status}, geminiResponse.status === 429 ? 429 : 502, headers);
+  }
 
   let answer;
   try {
