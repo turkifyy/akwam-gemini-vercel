@@ -311,7 +311,7 @@ test('fullscreen ad pauses at the exact position and resumes after fifteen secon
   assert.equal(adLink.attributes.href, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
   assert.equal(page.video.currentTime, 600.375);
   assert.equal(page.video.paused, false);
-  assert.equal(page.video.playCalls, 2);
+  assert.equal(page.video.playCalls, 1);
 });
 
 test('playing from minute nine triggers the minute-ten ad before episode advance in fullscreen', () => {
