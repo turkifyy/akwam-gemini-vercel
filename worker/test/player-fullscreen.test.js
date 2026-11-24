@@ -67,6 +67,8 @@ function runWatchPage(episode, sessionStorage = createStorage()) {
     readyState:4,
     duration:1800,
     currentTime:0,
+    playbackRate:1,
+    seeking:false,
     muted:false,
     paused:false,
     ended:false,
@@ -98,7 +100,7 @@ function runWatchPage(episode, sessionStorage = createStorage()) {
     documentElement:root,
     head:{appendChild(element) { mobileSearchStyles.push(element); }},
     createElement(tagName) {
-      return {
+      const element = {
         tagName,className:'',textContent:'',attributes:{},listeners:{},children:[],
         setAttribute(name,value) { this.attributes[name] = String(value); },
         addEventListener(name,callback) { this.listeners[name] = callback; },
@@ -109,6 +111,14 @@ function runWatchPage(episode, sessionStorage = createStorage()) {
           this.parentElement = null;
         }
       };
+      Object.defineProperty(element,'src',{
+        get() { return this._src || ''; },
+        set(value) {
+          this._src = value;
+          if (value !== 'about:blank') this.playerAtSrc = this.parentElement?.parentElement || null;
+        }
+      });
+      return element;
     },
     querySelector(selector) {
       if (selector === '.main-header .row') return searchRow;
@@ -150,7 +160,8 @@ function runWatchPage(episode, sessionStorage = createStorage()) {
   };
 
   vm.runInNewContext(bootstrapScript, context);
-  return {player,button,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video};
+  for (const callback of videoListeners.get('seeked') || []) callback();
+  return {player,button,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners};
 }
 
 function clickFullscreen(page) {
@@ -160,6 +171,10 @@ function clickFullscreen(page) {
     stopImmediatePropagation() {}
   };
   page.listeners.get('click').at(-1)(event);
+}
+
+function dispatchVideoEvent(page, name) {
+  for (const callback of page.videoListeners.get(name) || []) callback();
 }
 
 test("mobile search is reachable and focuses the existing search form", () => {
@@ -211,13 +226,21 @@ test('old series-wide dismissal does not block automatic mode', () => {
 test('ad break pauses at the exact position and resumes after five seconds', () => {
   const page = runWatchPage(1);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
-  page.video.currentTime = 612.375;
-  for (let second = 0; second < 600; second++) tick();
+  page.video.currentTime = 100.375;
+  page.video.seeking = true;
+  dispatchVideoEvent(page,'seeking');
+  page.video.seeking = false;
+  dispatchVideoEvent(page,'seeked');
+  for (let second = 0; second < 600; second++) {
+    page.video.currentTime += 1;
+    tick();
+  }
 
   const overlay = page.player.children.find(element => element.className === 'akwam-ad-break');
   assert.ok(overlay);
   const [adFrame,countdown] = overlay.children;
   assert.equal(adFrame.src, 'https://aarems.org/1/962ae41308332ad6376e83c9183edfbc');
+  assert.equal(adFrame.playerAtSrc, page.player);
   assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-same-origin allow-forms');
   assert.match(countdown.textContent, /5 ثوانٍ$/);
   assert.equal(page.video.paused, true);
@@ -230,7 +253,7 @@ test('ad break pauses at the exact position and resumes after five seconds', () 
 
   assert.equal(page.player.children.includes(overlay), false);
   assert.equal(adFrame.src, 'about:blank');
-  assert.equal(page.video.currentTime, 612.375);
+  assert.equal(page.video.currentTime, 700.375);
   assert.equal(page.video.paused, false);
   assert.equal(page.video.playCalls, 2);
 });
@@ -243,8 +266,28 @@ test('paused time does not count toward the next ad break', () => {
   assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), false);
 
   page.video.paused = false;
-  for (let second = 0; second < 599; second++) tick();
+  for (let second = 0; second < 599; second++) {
+    page.video.currentTime += 1;
+    tick();
+  }
   assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), false);
+  page.video.currentTime += 1;
+  tick();
+  assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), true);
+});
+
+test('delayed timer catches up from playback progress without counting a manual seek', () => {
+  const page = runWatchPage(1);
+  const tick = page.intervals.find(timer => timer.delay === 1000).callback;
+  page.video.currentTime = 600;
+  page.video.seeking = true;
+  dispatchVideoEvent(page,'seeking');
+  page.video.seeking = false;
+  dispatchVideoEvent(page,'seeked');
+  tick();
+  assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), false);
+
+  page.video.currentTime += 600;
   tick();
   assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), true);
 });
