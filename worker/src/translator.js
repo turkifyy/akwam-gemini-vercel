@@ -10,6 +10,7 @@ export const translatorScript = String.raw`(() => {
   const cache = new Map();
   const MAX_CHUNK = 700;
   let draining = false;
+  let retryTimer = 0;
   let translated = 0;
   let queued = 0;
 
@@ -88,7 +89,7 @@ export const translatorScript = String.raw`(() => {
     callbacks.push(apply);
     pending.set(value, callbacks);
     queued += callbacks.length === 1 ? 1 : 0;
-    if (!draining) setTimeout(drain, 120);
+    if (!draining && !retryTimer) setTimeout(drain, 120);
   }
 
   async function drain() {
@@ -129,10 +130,23 @@ export const translatorScript = String.raw`(() => {
         report('translation-progress', {translated, queued, pending:pending.size});
       } catch (error) {
         const status = Number(error.status) || 0;
+        const retryable = !status || status === 429 || status >= 500;
+        if (status === 429) {
+          for (const [value, callbacks] of batch) {
+            const waiting = pending.get(value) || [];
+            pending.set(value, callbacks.concat(waiting));
+          }
+          const retryAfter = Number(error.retryAfter) * 1000;
+          const delay = Math.max(5000, Math.min(300000, retryAfter || 0));
+          retryTimer = setTimeout(() => {
+            retryTimer = 0;
+            drain();
+          }, delay);
+        }
         report('translation-error', {
           message:String(error.message || 'Translation failed'),
           status,
-          retryable:!status || status === 429 || status >= 500,
+          retryable,
           retryAfter:Number(error.retryAfter) || 0
         });
         break;

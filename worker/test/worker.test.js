@@ -180,6 +180,7 @@ function createTextHarness({source,fetch:fetchTranslation}) {
     isConnected:true
   };
   const reports = [];
+  const retryTimers = [];
   let onMutation = () => {};
   const root = {
     nodeType:1,
@@ -211,8 +212,18 @@ function createTextHarness({source,fetch:fetchTranslation}) {
     localStorage:{getItem() { return null; },setItem() {}},
     sessionStorage:{getItem() { return null; },setItem() {},removeItem() {}},
     fetch:fetchTranslation,
-    setTimeout,
-    clearTimeout,
+    setTimeout(callback,delay) {
+      if (delay > 1000) {
+        const timer = {callback,delay};
+        retryTimers.push(timer);
+        return timer;
+      }
+      return globalThis.setTimeout(callback,delay);
+    },
+    clearTimeout(timer) {
+      if (typeof timer === 'object') timer.cancelled = true;
+      else globalThis.clearTimeout(timer);
+    },
     MutationObserver:class {
       constructor(callback) { onMutation = callback; }
       observe() {}
@@ -224,6 +235,7 @@ function createTextHarness({source,fetch:fetchTranslation}) {
   return {
     node,
     reports,
+    retryTimers,
     updateText(value) {
       node.nodeValue = value;
       onMutation([{type:'characterData',target:node}]);
@@ -367,19 +379,27 @@ test('a late translation does not overwrite text that changed while the request 
 });
 
 test('a 429 translation error is retryable and preserves the server retry delay', async () => {
+  let attempts = 0;
   const harness = createTextHarness({
     source:'Hello',
-    fetch:async () => ({
-      ok:false,
-      status:429,
-      headers:new Headers({'Retry-After':'60'})
-    })
+    fetch:async () => {
+      attempts += 1;
+      return attempts === 1
+        ? {ok:false,status:429,headers:new Headers({'Retry-After':'60'})}
+        : {ok:true,json:async() => ({translations:['Hello translated']})};
+    }
   });
   await new Promise(resolve => setTimeout(resolve,140));
   const error = harness.reports.find(report => report.type === 'translation-error');
   assert.equal(error.status, 429);
   assert.equal(error.retryable, true);
   assert.equal(error.retryAfter, 60);
+  const retry = harness.retryTimers.find(timer => timer.delay === 60000);
+  assert.ok(retry);
+  retry.callback();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(attempts, 2);
+  assert.equal(harness.node.nodeValue, 'Hello translated');
 });
 
 test('navigation labels follow the detected language and set the matching direction', async () => {
@@ -441,7 +461,7 @@ test('retry preserves the detail page and the active category returns to its lis
   assert.equal(harness.frame.src, newArchive);
 });
 
-test('a translation rate limit waits for the server-provided retry delay', async () => {
+test('the parent does not reload the frame while the translator retries a rate limit', async () => {
   const page = await readFile(new URL('../../site/index.html', import.meta.url), 'utf8');
   const script = page.slice(page.indexOf('<script>') + 8, page.lastIndexOf('</script>'));
   const harness = createNavigationHarness(script,{country:'US',language:'en'});
@@ -451,7 +471,7 @@ test('a translation rate limit waits for the server-provided retry delay', async
     source:harness.frame.contentWindow,
     data:{source:'akwam-gemini-bridge',type:'translation-error',retryable:true,status:429,retryAfter:60}
   });
-  assert.equal([...harness.timers.values()].some(timer => timer.delay === 60000), true);
+  assert.equal(harness.timers.size, 0);
 });
 
 test('auto-pagination waits 7 seconds at the bottom and cancels if the user scrolls away', () => {
