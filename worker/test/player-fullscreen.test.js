@@ -237,14 +237,15 @@ test('old series-wide dismissal does not block automatic mode', () => {
 test('ad break pauses at the exact position and resumes after five seconds', () => {
   const page = runWatchPage(1);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
-  page.video.currentTime = 100.375;
+  page.video.currentTime = 590.375;
   page.video.seeking = true;
   dispatchVideoEvent(page,'seeking');
   page.video.seeking = false;
   dispatchVideoEvent(page,'seeked');
-  for (let second = 0; second < 600; second++) {
+  for (let second = 0; second < 10; second++) {
     page.video.currentTime += 1;
-    tick();
+    dispatchVideoEvent(page,'timeupdate');
+    if (!page.player.children.some(element => element.className === 'akwam-ad-break')) tick();
   }
 
   const overlay = page.player.children.find(element => element.className === 'akwam-ad-break');
@@ -264,19 +265,24 @@ test('ad break pauses at the exact position and resumes after five seconds', () 
 
   assert.equal(page.player.children.includes(overlay), false);
   assert.equal(adFrame.src, 'about:blank');
-  assert.equal(page.video.currentTime, 700.375);
+  assert.equal(page.video.currentTime, 600.375);
   assert.equal(page.video.paused, false);
   assert.equal(page.video.playCalls, 2);
 });
 
-test('ten-minute ad break preempts episode advance and preserves fullscreen', () => {
+test('playing from minute nine triggers the minute-ten ad before episode advance in fullscreen', () => {
   const page = runWatchPage(1, createStorage(), {
-    duration:755,
+    duration:670,
     nextEpisodeUrl:'https://worker.example/site/en/watch/181288/102322/show/episode-2'
   });
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
+  page.video.currentTime = 540;
+  page.video.seeking = true;
+  dispatchVideoEvent(page,'seeking');
+  page.video.seeking = false;
+  dispatchVideoEvent(page,'seeked');
 
-  for (let second = 0; second < 600; second++) {
+  for (let second = 0; second < 60; second++) {
     page.video.currentTime += 1;
     dispatchVideoEvent(page,'timeupdate');
     if (!page.player.children.some(element => element.className === 'akwam-ad-break')) tick();
@@ -285,7 +291,7 @@ test('ten-minute ad break preempts episode advance and preserves fullscreen', ()
   assert.ok(page.player.children.some(element => element.className === 'akwam-ad-break'));
   assert.equal(page.navigation.length, 0);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
-  assert.equal(page.video.currentTime, 685);
+  assert.equal(page.video.currentTime, 600);
   assert.equal(page.video.paused, true);
 });
 
@@ -296,18 +302,18 @@ test('paused time does not count toward the next ad break', () => {
   for (let second = 0; second < 1200; second++) tick();
   assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), false);
 
+  page.video.currentTime = 599;
+  page.video.seeking = true;
+  dispatchVideoEvent(page,'seeking');
+  page.video.seeking = false;
+  dispatchVideoEvent(page,'seeked');
   page.video.paused = false;
-  for (let second = 0; second < 599; second++) {
-    page.video.currentTime += 1;
-    tick();
-  }
-  assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), false);
   page.video.currentTime += 1;
-  tick();
+  dispatchVideoEvent(page,'timeupdate');
   assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), true);
 });
 
-test('delayed timer catches up from playback progress without counting a manual seek', () => {
+test('a manual seek past the ad mark does not trigger immediately', () => {
   const page = runWatchPage(1);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
   page.video.currentTime = 600;
@@ -319,7 +325,7 @@ test('delayed timer catches up from playback progress without counting a manual 
   assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), false);
 
   page.video.currentTime += 600;
-  tick();
+  dispatchVideoEvent(page,'timeupdate');
   assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), true);
 });
 
