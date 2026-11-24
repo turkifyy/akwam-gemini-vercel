@@ -179,6 +179,7 @@ const bootstrapScript = String.raw`(() => {
   if (watchPage) {
     const attachedVideos = new WeakSet();
     const adBreakVideos = new WeakSet();
+    const adBreakStates = new WeakMap();
     const autoplayAttempted = new WeakSet();
     const advancedVideos = new WeakSet();
     const adBreakIntervalMs = 10 * 60 * 1000;
@@ -209,7 +210,13 @@ const bootstrapScript = String.raw`(() => {
 
     function advanceEpisode(video, ended=false) {
       if (advancedVideos.has(video)) return;
+      const adBreak = adBreakStates.get(video);
+      if (adBreak) {
+        adBreak.updatePlaybackProgress();
+        if (adBreak.isActive()) return;
+      }
       if (!ended && (!Number.isFinite(video.duration) || video.duration <= 70 || video.currentTime < video.duration - 70)) return;
+      if (!ended && adBreak?.willOccurBeforeEnd()) return;
       const nextUrl = resolveNextEpisode();
       if (!nextUrl) return;
       advancedVideos.add(video);
@@ -403,17 +410,8 @@ const bootstrapScript = String.raw`(() => {
         adFrame.src = adFrameUrl;
       }
 
-      for (const eventName of ['seeking','seeked','ratechange']) {
-        video.addEventListener(eventName, resetPlaybackPosition);
-      }
-
-      setInterval(() => {
-        if (adActive) {
-          secondsRemaining -= 1;
-          if (secondsRemaining <= 0) closeAdBreak();
-          else updateCountdown();
-          return;
-        }
+      function updatePlaybackProgress() {
+        if (adActive) return;
         const currentPosition = Number(video.currentTime);
         if (video.paused !== false || video.ended || video.readyState < 2 || video.seeking) {
           if (Number.isFinite(currentPosition)) playbackPosition = currentPosition;
@@ -428,6 +426,35 @@ const bootstrapScript = String.raw`(() => {
           activePlaybackMs = 0;
           openAdBreak();
         }
+      }
+
+      function willOccurBeforeEnd() {
+        if (adActive || video.paused !== false || video.ended || video.seeking || !Number.isFinite(video.duration)) return false;
+        const remainingMediaSeconds = video.duration - Number(video.currentTime);
+        const remainingAdMs = adBreakIntervalMs - activePlaybackMs;
+        const playbackRate = Number(video.playbackRate) || 1;
+        return remainingMediaSeconds > 0 && remainingAdMs > 0 &&
+          remainingAdMs <= remainingMediaSeconds * 1000 / playbackRate;
+      }
+
+      adBreakStates.set(video, {
+        updatePlaybackProgress,
+        isActive:() => adActive,
+        willOccurBeforeEnd
+      });
+
+      for (const eventName of ['seeking','seeked','ratechange']) {
+        video.addEventListener(eventName, resetPlaybackPosition);
+      }
+
+      setInterval(() => {
+        if (adActive) {
+          secondsRemaining -= 1;
+          if (secondsRemaining <= 0) closeAdBreak();
+          else updateCountdown();
+          return;
+        }
+        updatePlaybackProgress();
       },1000);
     }
 
