@@ -183,7 +183,7 @@ export const bootstrapScript = String.raw`(() => {
     const autoplayAttempted = new WeakSet();
     const advancedVideos = new WeakSet();
     const adBreakIntervalSeconds = 10 * 60;
-    const adBreakDurationSeconds = 5;
+    const adBreakDurationSeconds = 15;
     const adLinkUrl = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
     let nextEpisodeUrl = '';
     let nextEpisodeResolved = false;
@@ -238,6 +238,7 @@ export const bootstrapScript = String.raw`(() => {
       '.akwam-immersive-player button[data-plyr="fullscreen"] .icon--pressed,.akwam-immersive-player button[data-plyr="fullscreen"] .label--pressed{display:block!important}' +
       '.akwam-ad-supported:not(.akwam-immersive-player){position:relative!important}' +
       '.akwam-ad-break{position:absolute!important;inset:0!important;z-index:2147483646!important;display:grid!important;place-items:center!important;overflow:hidden!important;background:radial-gradient(circle at 50% 35%,#1b2740,#07090f 68%)!important}' +
+      '.akwam-immersive-player>.akwam-ad-break{position:absolute!important;inset:0!important;z-index:2147483647!important}' +
       '.akwam-ad-card{display:grid!important;justify-items:center!important;gap:14px!important;width:min(520px,calc(100% - 36px))!important;padding:32px!important;border:1px solid #ffffff2a!important;border-radius:24px!important;background:linear-gradient(145deg,#1c2435,#11141c)!important;box-shadow:0 24px 80px #000a!important;color:#fff!important;text-align:center!important;font:500 15px/1.5 system-ui,sans-serif!important;direction:rtl!important}' +
       '.akwam-ad-label{padding:5px 10px!important;border-radius:999px!important;background:#ffffff12!important;color:#d5f287!important;font-size:12px!important;font-weight:700!important}' +
       '.akwam-ad-title{margin:0!important;font-size:clamp(22px,3vw,32px)!important;line-height:1.25!important;font-weight:800!important}' +
