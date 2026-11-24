@@ -331,6 +331,24 @@ test('injected scripts bypass stale browser caches', async () => {
   }
 });
 
+test('video ad bridge uses a fixed Smart Link and rejects other methods', async () => {
+  const response = await worker.fetch(new Request(workerUrl + '/__bridge/ad?url=https://attacker.example'), {});
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get('Location'), 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
+  assert.equal(response.headers.get('Cache-Control'), 'no-store');
+
+  const rejected = await worker.fetch(new Request(workerUrl + '/__bridge/ad', {method:'POST'}), {});
+  assert.equal(rejected.status, 405);
+  assert.equal(rejected.headers.get('Allow'), 'GET, HEAD');
+});
+
+test('the player ad iframe is routed through the Worker bridge', async () => {
+  const bootstrap = await readFile(new URL('../src/bootstrap.js', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../src/index.js', import.meta.url), 'utf8');
+  assert.match(bootstrap, /adFrame\.src = adBridgeUrl \|\| adLinkUrl/);
+  assert.match(source, /adBridgeUrl:workerOrigin \+ '\/__bridge\/ad'/);
+});
+
 test('Korean and foreign archive posters keep labels when titles need no translation', async () => {
   const posters = [
     {href:'https://bridge.example.workers.dev/site/en/series?section=33&language=12',alt:'Love in Disguise'},
