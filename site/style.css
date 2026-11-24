@@ -43,6 +43,10 @@ html, body, .app { position: fixed; inset: 0; width: 100%; height: 100%; margin:
 .category-tab { position: relative; display: flex; flex: 1 1 0; max-width: 180px; min-width: 0; height: 73px; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 5px 12px; border: 0; border-radius: 14px; color: var(--muted); background: transparent; font: inherit; font-size: 12px; font-weight: 650; line-height: 1.2; white-space: nowrap; text-decoration: none; cursor: pointer; transition: color .18s ease, background-color .18s ease; }
 .category-tab:hover { color: var(--text); background: var(--nav-hover); }
 .category-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.player-tab { position: relative; display: flex; flex: 1 1 0; max-width: 180px; min-width: 0; height: 73px; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 5px 12px; border: 0; border-radius: 14px; color: var(--muted); background: transparent; font: inherit; font-size: 12px; font-weight: 650; line-height: 1.2; white-space: nowrap; text-decoration: none; cursor: pointer; transition: color .18s ease, background-color .18s ease; }
+.player-tab:hover { color: var(--text); background: var(--nav-hover); }
+.player-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.player-tab .category-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .category-tab.is-active { color: var(--accent); background: var(--nav-active); }
 .category-tab::after { position: absolute; right: 24px; bottom: 2px; left: 24px; height: 2px; border-radius: 3px; background: var(--accent); content: ""; opacity: 0; transform: scaleX(.55); transition: opacity .18s ease, transform .18s ease; }
 .category-tab.is-active::after { opacity: 1; transform: scaleX(1); }
@@ -65,6 +69,7 @@ html, body, .app { position: fixed; inset: 0; width: 100%; height: 100%; margin:
   .site-intro h1 { font-size: 18px; }
   .site-intro p { font-size: 11px; }
   .category-tab { height: 64px; gap: 3px; padding: 4px 2px; border-radius: 12px; font-size: 11px; }
+  .player-tab { height: 64px; gap: 3px; padding: 4px 2px; border-radius: 12px; font-size: 11px; }
   .tab-icon-wrap { width: 20px; height: 20px; }
   .notification-badge { right: -7px; }
   .category-tab::after { right: 14px; left: 14px; }

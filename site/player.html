@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#111713">
+<title>مشغّل أكوام | معاينة آمنة</title>
+<style>
+:root{color-scheme:dark;--bg:#101512;--panel:#171e19;--panel2:#1d2620;--line:#303b33;--text:#f1f3eb;--muted:#9ca99e;--lime:#c6f36a;--orange:#ff8b67;--blue:#9bc5ff;--radius:20px;font-family:Inter,"Segoe UI",Tahoma,Arial,sans-serif}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 13% 0%,#29362a 0,transparent 34rem),var(--bg);color:var(--text);min-height:100vh}button,input{font:inherit}button{cursor:pointer}.wrap{width:min(1240px,calc(100% - 40px));margin:auto}.topbar{height:76px;border-bottom:1px solid #ffffff12;display:flex;align-items:center;justify-content:space-between}.brand{display:flex;align-items:center;gap:11px;font-weight:800;letter-spacing:.02em}.brand-mark{width:34px;height:34px;border-radius:11px;background:var(--lime);color:#182014;display:grid;place-items:center;font-size:17px;font-weight:900}.brand small{display:block;color:var(--muted);font-size:10px;letter-spacing:.18em;margin-top:2px}.top-status,.tag{border:1px solid var(--line);border-radius:999px;padding:8px 12px;color:#d7dfd5;font-size:12px;display:flex;align-items:center;gap:8px}.dot{width:7px;height:7px;background:var(--lime);border-radius:50%;box-shadow:0 0 12px #c6f36a88}.intro{padding:32px 0 23px;display:flex;align-items:end;justify-content:space-between;gap:18px}.eyebrow{font-size:11px;letter-spacing:.17em;color:var(--lime);font-weight:700}.intro h1{font-size:clamp(25px,3vw,39px);line-height:1.22;margin:9px 0 7px;letter-spacing:-.04em}.intro p{margin:0;color:var(--muted);font-size:14px;line-height:1.7}.layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(300px,.78fr);gap:18px;align-items:start}.panel{background:linear-gradient(145deg,#1a211c,#151b17);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:0 18px 48px #0003}.screen{position:relative;aspect-ratio:16/9;background:radial-gradient(ellipse at 52% 44%,#344536 0,#1e2a21 30%,#101512 74%);overflow:hidden}.screen:before,.screen:after{content:"";position:absolute;pointer-events:none}.screen:before{width:38%;height:72%;left:31%;top:13%;border:1px solid #ffffff16;border-radius:48% 48% 35% 35%;transform:rotate(-14deg);background:linear-gradient(145deg,#ffffff0b,#8fb86d0c);box-shadow:0 0 100px #c6f36a12}.screen:after{inset:auto 0 0;height:45%;background:linear-gradient(transparent,#080b09e8)}video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:1;background:transparent}.screen-caption{position:absolute;z-index:2;top:18px;right:18px;left:18px;display:flex;justify-content:space-between;align-items:center;pointer-events:none}.screen-caption .tag{background:#101512aa;backdrop-filter:blur(10px);padding:7px 10px}.screen-center{position:absolute;z-index:3;inset:0;display:grid;place-items:center;pointer-events:none}.big-play{pointer-events:auto;width:66px;height:66px;border-radius:50%;border:1px solid #ffffff70;background:#c6f36a;color:#182014;font-size:20px;box-shadow:0 0 0 12px #c6f36a14,0 8px 30px #0007}.big-play:hover{transform:scale(1.05)}.controls{position:absolute;z-index:4;bottom:0;right:0;left:0;padding:25px 18px 16px;display:grid;gap:10px}.timeline{width:100%;height:5px;accent-color:var(--lime);direction:ltr;cursor:pointer}.control-row{display:flex;align-items:center;gap:11px}.control-row button{border:0;color:var(--text);background:transparent;padding:6px 8px;border-radius:8px}.control-row button:hover{background:#ffffff12}.time{direction:ltr;color:#d9ded8;font-size:11px;font-variant-numeric:tabular-nums}.grow{flex:1}.volume{width:76px;accent-color:var(--lime);direction:ltr}.quality-pill{font-size:10px;color:#dbe6d8;border:1px solid #ffffff24;border-radius:999px;padding:5px 8px;direction:ltr}.below{padding:17px 19px 19px;display:flex;align-items:center;justify-content:space-between;gap:12px}.title-block h2{font-size:17px;margin:0 0 5px}.title-block p{font-size:12px;color:var(--muted);margin:0}.source-badge{font-size:11px;color:#c6f36a;border:1px solid #c6f36a4d;padding:7px 10px;border-radius:999px;white-space:nowrap}.side{display:grid;gap:14px}.card{padding:18px}.card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.card-head h3{font-size:14px;margin:0}.card-head span{font-size:10px;color:var(--muted);letter-spacing:.08em}.field-label{display:block;color:#c8d0c8;font-size:11px;margin:0 0 7px}.field{width:100%;min-width:0;background:#0f1511;border:1px solid var(--line);border-radius:11px;padding:12px;color:var(--text);outline:none;direction:ltr;text-align:left;font-size:12px}.field:focus{border-color:#c6f36a9c;box-shadow:0 0 0 3px #c6f36a14}.row{display:flex;gap:8px;margin-top:9px}.btn{border:1px solid var(--line);border-radius:11px;padding:10px 12px;background:#242e26;color:var(--text);font-size:12px;font-weight:700}.btn:hover{border-color:#879784}.btn.primary{background:var(--lime);color:#1a2315;border-color:var(--lime)}.btn.primary:hover{background:#d8ff8a}.btn.full{width:100%}.hint{font-size:11px;line-height:1.65;color:var(--muted);margin:11px 0 0}.divider{height:1px;background:var(--line);margin:16px 0}.metric{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #ffffff0d;font-size:12px}.metric:last-child{border:0;padding-bottom:0}.metric span:first-child{color:var(--muted)}.metric strong{font-variant-numeric:tabular-nums}.clock{font-size:22px!important;color:var(--lime)}.progress-track{height:4px;background:#2a352d;border-radius:9px;overflow:hidden;margin-top:12px}.progress-fill{height:100%;width:0;background:var(--lime);transition:width .3s}.break-box{margin-top:14px;padding:15px;border:1px solid #ff8b6760;background:#ff8b6710;border-radius:14px}.break-box[hidden]{display:none}.break-head{font-size:13px;font-weight:800;color:#ffc1ad;display:flex;align-items:center;gap:8px}.break-copy{color:#c9c2ba;font-size:11px;line-height:1.65;margin:8px 0 12px}.frame-wrap{height:180px;border-radius:11px;overflow:hidden;background:#0b0e0c;margin:10px 0}.frame-wrap[hidden]{display:none}.frame-wrap iframe{border:0;width:100%;height:100%;background:#090d0a}details.debug{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}details.debug summary{cursor:pointer;color:#c8d0c8;font-size:11px;user-select:none}.debug-grid{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:12px;font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--muted)}.debug-grid b{color:#dce6dc;font-weight:500;text-align:left}.footnote{margin:18px 0 32px;text-align:center;color:#7f8b80;font-size:11px;line-height:1.7}.footnote a{color:var(--lime)}.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#263228;border:1px solid #50644c;border-radius:12px;padding:11px 15px;color:#edf4e8;font-size:12px;box-shadow:0 8px 30px #0008;z-index:10}.toast[hidden]{display:none}@media(max-width:860px){.layout{grid-template-columns:1fr}.intro{align-items:start;flex-direction:column}.side{grid-template-columns:1fr 1fr}.side .schedule{grid-column:1/-1}}@media(max-width:560px){.wrap{width:min(100% - 22px,600px)}.topbar{height:64px}.top-status{font-size:10px;padding:7px 9px}.intro{padding:24px 0 17px}.intro h1{font-size:27px}.intro p{font-size:12px}.layout{gap:12px}.panel{border-radius:15px}.screen{aspect-ratio:16/10}.screen-caption{top:10px;right:10px;left:10px}.screen-caption .tag{font-size:9px;padding:6px 8px}.big-play{width:54px;height:54px}.controls{padding:22px 10px 10px;gap:7px}.control-row{gap:4px}.control-row button{padding:6px;font-size:11px}.volume{width:54px}.quality-pill{display:none}.below{padding:13px}.title-block h2{font-size:14px}.side{grid-template-columns:1fr}.side .schedule{grid-column:auto}.card{padding:15px}.footnote{margin-bottom:22px}}
+</style>
+</head>
+<body>
+<header class="topbar wrap"><div class="brand"><div class="brand-mark">A</div><div>AKWAM <small>PLAYER LAB</small></div></div><div class="top-status"><i class="dot"></i><span>معاينة مشغّل آمنة</span></div></header>
+<main class="wrap">
+<section class="intro"><div><div class="eyebrow">مشغّل ويب · HLS / DASH / MP4</div><h1>مشاهدة أوضح. تحكّم أبسط.</h1><p>مشغّل متجاوب مع استراحة راعٍ معلنة، من دون إخفاء إطارات أو تجاوز سياسات المواقع.</p></div><span class="tag">● وضع تجريبي</span></section>
+<div class="layout">
+<section class="panel" aria-label="مشغل الفيديو">
+<div class="screen" id="screen"><video id="video" playsinline preload="metadata" poster="https://images.unsplash.com/photo-1478720568477-152d9b164e26?auto=format&fit=crop&w=1400&q=80"></video><div class="screen-caption"><span class="tag">محتوى تجريبي</span><span class="tag" id="playState">متوقف</span></div><div class="screen-center" id="centerPlay"><button class="big-play" id="bigPlay" aria-label="تشغيل الفيديو">▶</button></div><div class="controls"><input class="timeline" id="seek" type="range" min="0" max="1000" value="0" aria-label="موضع الفيديو"><div class="control-row"><button id="playButton" aria-label="تشغيل أو إيقاف">▶</button><span class="time" id="timeReadout">00:00 / 00:00</span><div class="grow"></div><button id="muteButton" aria-label="كتم الصوت">صوت</button><input class="volume" id="volume" type="range" min="0" max="1" step="0.05" value="0.8" aria-label="مستوى الصوت"><span class="quality-pill" id="formatPill">MP4</span><button id="fullscreenButton" aria-label="ملء الشاشة">ملء الشاشة</button></div></div></div>
+<div class="below"><div class="title-block"><h2 id="videoTitle">مقطع تجريبي</h2><p id="videoNote">أدخل رابط بث تملكه أو لديك إذن باستخدامه.</p></div><span class="source-badge" id="sourceStatus">جاهز</span></div>
+</section>
+<aside class="side">
+<section class="panel card"><div class="card-head"><h3>مصدر الفيديو</h3><span>01 / SOURCE</span></div><label class="field-label" for="sourceUrl">رابط HLS أو DASH أو MP4</label><input class="field" id="sourceUrl" type="url" autocomplete="url" placeholder="https://example.com/video.m3u8"><div class="row"><button class="btn primary" id="loadSource">تحميل المصدر</button><button class="btn" id="demoSource">مقطع تجريبي</button></div><p class="hint">تحتاج قوائم HLS وDASH إلى سماح الخادم بطلبات الوسائط من المتصفح. يعمل MP4 مباشرة إذا كان الرابط عامًا.</p><div class="divider"></div><details><summary class="field-label">إعداد موضع الإعلان الرسمي</summary><div style="padding-top:10px"><label class="field-label" for="adUrl">رابط تضمين HTTPS صادر من مزوّدك</label><input class="field" id="adUrl" type="url" placeholder="https://publisher.example/embed"><div class="row"><button class="btn" id="saveAd">حفظ الرابط لهذه الجلسة</button></div><p class="hint">لن يُحمّل الإعلان تلقائيًا عند إعداد الرابط. يظهر موضعه بوضوح، ويتطلب ضغط «تحميل الإعلان» عند موعد الاستراحة.</p></div></details></section>
+<section class="panel card schedule"><div class="card-head"><h3>الاستراحة المجدولة</h3><span>02 / SCHEDULE</span></div><div class="metric"><span>الاستراحة التالية</span><strong class="clock" id="countdown">10:00</strong></div><div class="progress-track"><div class="progress-fill" id="timerProgress"></div></div><div class="metric"><span>حالة المؤقت</span><strong id="timerState">ينتظر التشغيل</strong></div><div class="metric"><span>الاستراحات في هذه الجلسة</span><strong id="breakCount">0</strong></div><div class="break-box" id="breakBox" hidden><div class="break-head">استراحة راعٍ مجدولة</div><p class="break-copy" id="breakCopy">توقّف الفيديو عند موعد الاستراحة. حمّل موضع الإعلان المعتمد أو تابع المشاهدة.</p><button class="btn primary full" id="loadAd">تحميل الإعلان</button><div class="frame-wrap" id="frameWrap" hidden></div><button class="btn full" id="continueVideo" style="margin-top:8px">متابعة الفيديو</button></div><details class="debug"><summary>لوحة التشخيص</summary><div class="debug-grid"><span>المؤقت</span><b id="debugTimer">متوقف</b><span>حالة الفيديو</span><b id="debugVideo">متوقف</b><span>عدد الاستراحات</span><b id="debugCount">0</b><span>محاولة الإطار</span><b id="debugFrame">لم تبدأ</b><span>ملاحظة</span><b>حدث التحميل لا يثبت أن الإعلان عُرض</b></div></details></section>
+</aside>
+</div>
+<p class="footnote">تضمين الإعلانات يخضع لسياسات المزوّد؛ إذا منع المزوّد العرض عبر إطار، استخدم تكامله الرسمي ولا تزل ترويسات الحماية. <span id="statusMessage">المؤقت يعمل فقط أثناء تشغيل الفيديو والصفحة ظاهرة.</span></p>
+</main><div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.18/dist/hls.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dashjs@4.7.4/dist/dash.all.min.js"></script>
+<script>
+(() => {
+  const video = document.getElementById('video');
+  const el = id => document.getElementById(id);
+  const DEMO_URL = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
+  const BREAK_SECONDS = 600;
+  let remaining = BREAK_SECONDS, breaks = 0, hls = null, dash = null;
+  let sponsorUrl = '', frameStatus = 'لم تبدأ', frameAttempted = false, toastTimer;
+  const fmt = seconds => { if (!Number.isFinite(seconds) || seconds < 0) seconds = 0; return `${String(Math.floor(seconds / 60)).padStart(2,'0')}:${String(Math.floor(seconds % 60)).padStart(2,'0')}`; };
+  function notify(text) { el('toast').textContent = text; el('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => el('toast').hidden = true, 3200); }
+  function updateTimer() {
+    const active = !video.paused && !video.ended && !document.hidden && el('breakBox').hidden;
+    el('countdown').textContent = fmt(remaining);
+    el('timerProgress').style.width = `${((BREAK_SECONDS - remaining) / BREAK_SECONDS) * 100}%`;
+    el('timerState').textContent = el('breakBox').hidden ? (active ? 'يعمل أثناء المشاهدة' : document.hidden ? 'متوقف: الصفحة بالخلفية' : 'متوقف: الفيديو متوقف') : 'استراحة معلنة';
+    el('debugTimer').textContent = el('timerState').textContent;
+    el('debugVideo').textContent = video.paused ? 'متوقف' : 'قيد التشغيل';
+    el('debugCount').textContent = String(breaks);
+  }
+  function showBreak() {
+    if (!el('breakBox').hidden) return;
+    breaks += 1; video.pause(); frameAttempted = false; frameStatus = 'لم تبدأ';
+    el('loadAd').disabled = false; el('frameWrap').hidden = true; el('frameWrap').replaceChildren();
+    el('breakBox').hidden = false; el('breakCount').textContent = String(breaks);
+    el('breakCopy').textContent = sponsorUrl ? 'أوقِف الفيديو عند موعد الاستراحة. حمّل الإعلان الآن بوضوح، أو تابع المشاهدة.' : 'أوقِف الفيديو عند موعد الاستراحة. أضف رابط التضمين الرسمي في الإعدادات، أو تابع المشاهدة.';
+    el('loadAd').hidden = !sponsorUrl; frameStatus = sponsorUrl ? 'جاهز للتحميل اليدوي' : 'لا يوجد رابط مُعد'; updateTimer();
+  }
+  function safeHttps(raw) {
+    try { const u = new URL(raw); return u.protocol === 'https:' && !u.username && !u.password ? u.href : ''; } catch { return ''; }
+  }
+  function clearPlayers() { if (hls) { hls.destroy(); hls = null; } if (dash) { dash.reset(); dash = null; } }
+  function loadSource(raw) {
+    const url = safeHttps(raw.trim());
+    if (!url) { notify('أدخل رابط HTTPS صالحًا.'); return; }
+    clearPlayers(); video.pause(); video.loop = false; video.removeAttribute('src'); video.load();
+    el('playButton').textContent = '▶'; el('bigPlay').hidden = false; el('centerPlay').style.pointerEvents = ''; el('playState').textContent = 'متوقف'; updateTimer();
+    const path = new URL(url).pathname.toLowerCase();
+    const type = path.endsWith('.m3u8') ? 'HLS' : path.endsWith('.mpd') ? 'DASH' : 'MP4 / مباشر';
+    el('formatPill').textContent = type; el('sourceStatus').textContent = 'جارٍ التحميل';
+    el('videoTitle').textContent = type === 'MP4 / مباشر' ? 'مقطع مباشر' : `بث ${type}`;
+    if (type === 'HLS' && window.Hls?.isSupported()) {
+      hls = new Hls({ enableWorker: true }); hls.loadSource(url); hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => { el('sourceStatus').textContent = 'جاهز للتشغيل'; });
+      hls.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) { el('sourceStatus').textContent = 'تعذر تشغيل البث'; notify('تعذر تشغيل HLS. تحقق من الرابط وCORS.'); } });
+    } else if (type === 'DASH' && window.dashjs) {
+      dash = dashjs.MediaPlayer().create(); dash.initialize(video, url, false);
+      dash.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => { el('sourceStatus').textContent = 'جاهز للتشغيل'; });
+      dash.on(dashjs.MediaPlayer.events.ERROR, () => { el('sourceStatus').textContent = 'تعذر تشغيل البث'; });
+    } else if (type === 'HLS' && video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = url;
+    } else {
+      video.src = url;
+    }
+    video.load(); el('sourceUrl').value = url;
+  }
+  function togglePlay() { if (video.paused) video.play().catch(() => notify('لم يبدأ التشغيل. تحقق من الرابط أو اضغط تشغيل مجددًا.')); else video.pause(); }
+  document.getElementById('loadSource').addEventListener('click', () => loadSource(el('sourceUrl').value));
+  document.getElementById('sourceUrl').addEventListener('keydown', e => { if (e.key === 'Enter') loadSource(el('sourceUrl').value); });
+  document.getElementById('demoSource').addEventListener('click', () => loadSource(DEMO_URL));
+  document.getElementById('playButton').addEventListener('click', togglePlay);
+  document.getElementById('bigPlay').addEventListener('click', togglePlay);
+  video.addEventListener('play', () => { el('playButton').textContent = '❚❚'; el('bigPlay').hidden = true; el('centerPlay').style.pointerEvents = 'none'; el('playState').textContent = 'قيد التشغيل'; updateTimer(); });
+  video.addEventListener('pause', () => { el('playButton').textContent = '▶'; el('bigPlay').hidden = false; el('centerPlay').style.pointerEvents = ''; el('playState').textContent = 'متوقف'; updateTimer(); });
+  video.addEventListener('timeupdate', () => { el('timeReadout').textContent = `${fmt(video.currentTime)} / ${fmt(video.duration)}`; if (Number.isFinite(video.duration) && video.duration) el('seek').value = String((video.currentTime / video.duration) * 1000); });
+  video.addEventListener('loadedmetadata', () => { el('sourceStatus').textContent = 'جاهز للتشغيل'; el('timeReadout').textContent = `00:00 / ${fmt(video.duration)}`; });
+  video.addEventListener('error', () => { if (el('sourceStatus').textContent === 'جارٍ التحميل') { el('sourceStatus').textContent = 'تعذر تشغيل المصدر'; notify('تعذر تحميل الفيديو. تحقق من الرابط وسياسة CORS.'); } });
+  document.getElementById('seek').addEventListener('input', e => { if (Number.isFinite(video.duration)) video.currentTime = (Number(e.target.value) / 1000) * video.duration; });
+  document.getElementById('volume').addEventListener('input', e => { video.volume = Number(e.target.value); video.muted = video.volume === 0; el('muteButton').textContent = video.muted ? 'كتم' : 'صوت'; });
+  document.getElementById('muteButton').addEventListener('click', () => { video.muted = !video.muted; el('muteButton').textContent = video.muted ? 'كتم' : 'صوت'; });
+  document.getElementById('fullscreenButton').addEventListener('click', () => { const target = el('screen'); if (document.fullscreenElement) document.exitFullscreen(); else target.requestFullscreen?.(); });
+  document.getElementById('saveAd').addEventListener('click', () => { const url = safeHttps(el('adUrl').value); if (!url) { notify('رابط الإعلان يجب أن يبدأ بـ HTTPS.'); return; } sponsorUrl = url; el('adUrl').value = url; notify('حُفظ الرابط لهذه الجلسة؛ لن يُحمّل إلا بعد ضغطك.'); if (!el('breakBox').hidden) { el('loadAd').hidden = false; el('breakCopy').textContent = 'أوقِف الفيديو عند موعد الاستراحة. حمّل الإعلان الآن بوضوح، أو تابع المشاهدة.'; } });
+  document.getElementById('loadAd').addEventListener('click', () => {
+    if (!sponsorUrl || frameAttempted) return;
+    frameAttempted = true; frameStatus = 'أُرسل طلب التحميل'; el('loadAd').disabled = true; el('frameWrap').hidden = false;
+    const frame = document.createElement('iframe'); frame.title = 'إعلان راعٍ'; frame.referrerPolicy = 'strict-origin'; frame.setAttribute('sandbox', 'allow-scripts allow-forms');
+    frame.addEventListener('load', () => { frameStatus = 'وصل حدث تحميل الإطار (غير مؤكد للعرض)'; el('debugFrame').textContent = frameStatus; });
+    frame.addEventListener('error', () => { frameStatus = 'أبلغ المتصفح عن خطأ'; el('debugFrame').textContent = frameStatus; });
+    frame.src = sponsorUrl; el('frameWrap').replaceChildren(frame); el('debugFrame').textContent = frameStatus;
+    setTimeout(() => { if (frameStatus === 'أُرسل طلب التحميل') { frameStatus = 'لم يصل حدث تحميل خلال 12 ثانية'; el('debugFrame').textContent = frameStatus; } }, 12000);
+  });
+  document.getElementById('continueVideo').addEventListener('click', () => { el('breakBox').hidden = true; el('frameWrap').replaceChildren(); el('frameWrap').hidden = true; remaining = BREAK_SECONDS; frameAttempted = false; frameStatus = 'أُغلق الإطار'; updateTimer(); video.play().catch(() => notify('اضغط تشغيل لمتابعة الفيديو.')); });
+  document.addEventListener('visibilitychange', updateTimer);
+  setInterval(() => { if (!video.paused && !video.ended && !document.hidden && el('breakBox').hidden) { remaining -= 1; if (remaining <= 0) { remaining = 0; showBreak(); } } updateTimer(); }, 1000);
+  video.volume = 0.8; loadSource(DEMO_URL); updateTimer();
+})();
+</script>
+</body>
+</html>
