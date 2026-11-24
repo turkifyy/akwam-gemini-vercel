@@ -99,6 +99,10 @@
         </span>
         <span class="category-label">أجنبي</span>
       </a>
+      <a class="player-tab" href="/player.html" data-player-tab aria-label="المشغّل">
+        <span class="tab-icon-wrap"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16l13-8z" fill="currentColor" stroke="none"/></svg></span>
+        <span class="category-label">المشغّل</span>
+      </a>
     </nav>
     <iframe
       id="site-frame"
@@ -263,22 +267,22 @@
   const countryLanguages = {};
   const supportedLanguages = new Set(['ar','en','tr','fr','de','es','it','pt','ru','fa','ur','hi','id','ja','ko','zh-CN']);
   const navigationLabels = {
-    ar:{nav:'تصنيفات المسلسلات',turkish:'تركي',indian:'هندي',korean:'كوري',foreign:'أجنبي'},
-    en:{nav:'Series categories',turkish:'Turkish',indian:'Indian',korean:'Korean',foreign:'Foreign'},
-    tr:{nav:'Dizi kategorileri',turkish:'Türk',indian:'Hint',korean:'Kore',foreign:'Yabancı'},
-    fr:{nav:'Catégories de séries',turkish:'Turques',indian:'Indiennes',korean:'Coréennes',foreign:'Étranger'},
-    de:{nav:'Serienkategorien',turkish:'Türkisch',indian:'Indisch',korean:'Koreanisch',foreign:'Ausland'},
-    es:{nav:'Categorías de series',turkish:'Turcas',indian:'Indias',korean:'Coreanas',foreign:'Exterior'},
-    it:{nav:'Categorie serie',turkish:'Turche',indian:'Indiane',korean:'Coreane',foreign:'Estere'},
-    pt:{nav:'Categorias de séries',turkish:'Turcas',indian:'Indianas',korean:'Coreanas',foreign:'Exterior'},
-    ru:{nav:'Категории сериалов',turkish:'Турецкие',indian:'Индийские',korean:'Корейские',foreign:'Мировые'},
-    fa:{nav:'دسته‌بندی سریال‌ها',turkish:'ترکی',indian:'هندی',korean:'کره‌ای',foreign:'خارجی'},
-    ur:{nav:'ڈراما سیریز کی اقسام',turkish:'ترک',indian:'بھارتی',korean:'کوریائی',foreign:'غیرملکی'},
-    hi:{nav:'सीरीज़ श्रेणियाँ',turkish:'तुर्की',indian:'भारतीय',korean:'कोरियाई',foreign:'विदेशी'},
-    id:{nav:'Kategori serial',turkish:'Turki',indian:'India',korean:'Korea',foreign:'Asing'},
-    ja:{nav:'ドラマのカテゴリ',turkish:'トルコ',indian:'インド',korean:'韓国',foreign:'海外'},
-    ko:{nav:'드라마 카테고리',turkish:'튀르키예',indian:'인도',korean:'한국',foreign:'해외'},
-    'zh-CN':{nav:'剧集分类',turkish:'土耳其',indian:'印度',korean:'韩国',foreign:'海外'}
+    ar:{nav:'تصنيفات المسلسلات',turkish:'تركي',indian:'هندي',korean:'كوري',foreign:'أجنبي',player:'المشغّل'},
+    en:{nav:'Series categories',turkish:'Turkish',indian:'Indian',korean:'Korean',foreign:'Foreign',player:'Player'},
+    tr:{nav:'Dizi kategorileri',turkish:'Türk',indian:'Hint',korean:'Kore',foreign:'Yabancı',player:'Oynatıcı'},
+    fr:{nav:'Catégories de séries',turkish:'Turques',indian:'Indiennes',korean:'Coréennes',foreign:'Étranger',player:'Lecteur'},
+    de:{nav:'Serienkategorien',turkish:'Türkisch',indian:'Indisch',korean:'Koreanisch',foreign:'Ausland',player:'Player'},
+    es:{nav:'Categorías de series',turkish:'Turcas',indian:'Indias',korean:'Coreanas',foreign:'Exterior',player:'Reproductor'},
+    it:{nav:'Categorie serie',turkish:'Turche',indian:'Indiane',korean:'Coreane',foreign:'Estere',player:'Lettore'},
+    pt:{nav:'Categorias de séries',turkish:'Turcas',indian:'Indianas',korean:'Coreanas',foreign:'Exterior',player:'Reprodutor'},
+    ru:{nav:'Категории сериалов',turkish:'Турецкие',indian:'Индийские',korean:'Корейские',foreign:'Мировые',player:'Плеер'},
+    fa:{nav:'دسته‌بندی سریال‌ها',turkish:'ترکی',indian:'هندی',korean:'کره‌ای',foreign:'خارجی',player:'پخش‌کننده'},
+    ur:{nav:'ڈراما سیریز کی اقسام',turkish:'ترک',indian:'بھارتی',korean:'کوریائی',foreign:'غیرملکی',player:'پلیئر'},
+    hi:{nav:'सीरीज़ श्रेणियाँ',turkish:'तुर्की',indian:'भारतीय',korean:'कोरियाई',foreign:'विदेशी',player:'प्लेयर'},
+    id:{nav:'Kategori serial',turkish:'Turki',indian:'India',korean:'Korea',foreign:'Asing',player:'Pemutar'},
+    ja:{nav:'ドラマのカテゴリ',turkish:'トルコ',indian:'インド',korean:'韓国',foreign:'海外',player:'プレーヤー'},
+    ko:{nav:'드라마 카테고리',turkish:'튀르키예',indian:'인도',korean:'한국',foreign:'해외',player:'플레이어'},
+    'zh-CN':{nav:'剧集分类',turkish:'土耳其',indian:'印度',korean:'韩国',foreign:'海外',player:'播放器'}
   };
 
   function addCountries(language, countryCodes) {
@@ -352,6 +356,13 @@
       if (labelTarget) labelTarget.textContent = label;
       button.title = label;
     });
+    const playerTab = nav.querySelector('[data-player-tab]');
+    if (playerTab) {
+      const playerLabel = labels.player || navigationLabels.en.player;
+      playerTab.querySelector('.category-label').textContent = playerLabel;
+      playerTab.setAttribute('aria-label', playerLabel);
+      playerTab.title = playerLabel;
+    }
     updateNotificationBadges();
   }
 
