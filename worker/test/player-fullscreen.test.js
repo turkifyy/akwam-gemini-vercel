@@ -250,10 +250,15 @@ test('ad break pauses at the exact position and resumes after five seconds', () 
 
   const overlay = page.player.children.find(element => element.className === 'akwam-ad-break');
   assert.ok(overlay);
-  const [adFrame,countdown] = overlay.children;
-  assert.equal(adFrame.src, 'https://aarems.org/1/962ae41308332ad6376e83c9183edfbc');
-  assert.equal(adFrame.playerAtSrc, page.player);
-  assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-same-origin allow-forms');
+  const [adCard,countdown] = overlay.children;
+  const [,adTitle,adDescription,adLink] = adCard.children;
+  assert.equal(adCard.attributes.role, 'article');
+  assert.equal(adTitle.textContent, 'قارن عروض الحسابات البنكية');
+  assert.match(adDescription.textContent, /العروض والرسوم والشروط/);
+  assert.equal(adLink.attributes.href, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
+  assert.equal(adLink.attributes.target, '_blank');
+  assert.equal(adLink.attributes.rel, 'sponsored noopener noreferrer');
+  assert.equal(adLink.textContent, 'زيارة الإعلان');
   assert.match(countdown.textContent, /5 ثوانٍ$/);
   assert.equal(page.video.paused, true);
   assert.equal(page.video.pauseCalls, 1);
@@ -264,7 +269,7 @@ test('ad break pauses at the exact position and resumes after five seconds', () 
   tick();
 
   assert.equal(page.player.children.includes(overlay), false);
-  assert.equal(adFrame.src, 'about:blank');
+  assert.equal(adLink.attributes.href, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
   assert.equal(page.video.currentTime, 600.375);
   assert.equal(page.video.paused, false);
   assert.equal(page.video.playCalls, 2);
