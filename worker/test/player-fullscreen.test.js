@@ -295,6 +295,29 @@ test('playing from minute nine triggers the minute-ten ad before episode advance
   assert.equal(page.video.paused, true);
 });
 
+test('an episode ending at the ad mark waits for the ad before advancing', () => {
+  const page = runWatchPage(1, createStorage(), {
+    duration:600,
+    nextEpisodeUrl:'https://worker.example/site/en/watch/181288/102322/show/episode-2'
+  });
+  const tick = page.intervals.find(timer => timer.delay === 1000).callback;
+  page.video.currentTime = 600;
+  page.video.paused = true;
+  page.video.ended = true;
+  dispatchVideoEvent(page,'ended');
+
+  assert.ok(page.player.children.some(element => element.className === 'akwam-ad-break'));
+  assert.equal(page.navigation.length, 0);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+
+  for (let second = 0; second < 4; second++) tick();
+  assert.equal(page.navigation.length, 0);
+  tick();
+
+  assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), false);
+  assert.deepEqual(page.navigation, ['https://worker.example/site/en/watch/181288/102322/show/episode-2']);
+});
+
 test('paused time does not count toward the next ad break', () => {
   const page = runWatchPage(1);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
