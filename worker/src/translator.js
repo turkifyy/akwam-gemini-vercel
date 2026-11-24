@@ -10,6 +10,7 @@ export const translatorScript = String.raw`(() => {
   const cache = new Map();
   const MAX_CHUNK = 700;
   let draining = false;
+  let retryTimer = 0;
   let translated = 0;
   let queued = 0;
 
@@ -88,7 +89,7 @@ export const translatorScript = String.raw`(() => {
     callbacks.push(apply);
     pending.set(value, callbacks);
     queued += callbacks.length === 1 ? 1 : 0;
-    if (!draining) setTimeout(drain, 120);
+    if (!draining && !retryTimer) setTimeout(drain, 120);
   }
 
   async function drain() {
@@ -106,6 +107,12 @@ export const translatorScript = String.raw`(() => {
         if (!response.ok) {
           const error = new Error('Translation service returned ' + response.status);
           error.status = response.status;
+          const retryAfterHeader = response.headers?.get?.('Retry-After') || '';
+          const retryAfterSeconds = Number(retryAfterHeader);
+          const retryAfterDate = Date.parse(retryAfterHeader);
+          error.retryAfter = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+            ? retryAfterSeconds
+            : Number.isFinite(retryAfterDate) ? Math.max(0, Math.ceil((retryAfterDate - Date.now()) / 1000)) : 0;
           throw error;
         }
         const result = await response.json();
@@ -123,10 +130,24 @@ export const translatorScript = String.raw`(() => {
         report('translation-progress', {translated, queued, pending:pending.size});
       } catch (error) {
         const status = Number(error.status) || 0;
+        const retryable = !status || status === 429 || status >= 500;
+        if (status === 429) {
+          for (const [value, callbacks] of batch) {
+            const waiting = pending.get(value) || [];
+            pending.set(value, callbacks.concat(waiting));
+          }
+          const retryAfter = Number(error.retryAfter) * 1000;
+          const delay = Math.max(5000, Math.min(300000, retryAfter || 0));
+          retryTimer = setTimeout(() => {
+            retryTimer = 0;
+            drain();
+          }, delay);
+        }
         report('translation-error', {
           message:String(error.message || 'Translation failed'),
           status,
-          retryable:!status || status >= 500
+          retryable,
+          retryAfter:Number(error.retryAfter) || 0
         });
         break;
       }
@@ -152,7 +173,7 @@ export const translatorScript = String.raw`(() => {
     pieces.forEach((piece, index) => enqueue(piece.text, value => {
       outputs[index] = value + piece.trailing;
       remaining -= 1;
-      if (remaining === 0 && node.isConnected) {
+      if (remaining === 0 && node.isConnected && textRecords.get(node) === record && node.nodeValue === source) {
         record.translated = outputs.join('').trim();
         node.nodeValue = leading + outputs.join('').trim() + trailing;
       }

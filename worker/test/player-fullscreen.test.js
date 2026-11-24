@@ -159,6 +159,8 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
   const window = {
     __AKWAM_BRIDGE__:{lang:'en',parentOrigin:'https://parent.example',upstreamHost:'akwam.ss'},
     fetch:() => Promise.resolve(),
+    openCalls:[],
+    open(...args) { this.openCalls.push(args); return {}; },
     parent:{postMessage(message, target) { messages.push({message,target}); }}
   };
   class MutationObserver { observe() {} }
@@ -172,7 +174,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
 
   vm.runInNewContext(bootstrapScript, context);
   for (const callback of videoListeners.get('seeked') || []) callback();
-  return {player,button,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners,navigation};
+  return {player,button,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners,navigation,window};
 }
 
 function clickFullscreen(page) {
@@ -232,6 +234,33 @@ test('old series-wide dismissal does not block automatic mode', () => {
   sessionStorage.setItem('akwam-immersive-dismissed-v1:5744', '1');
   const page = runWatchPage(3, sessionStorage);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+});
+
+test('only the sponsored fullscreen link can open an external popup', () => {
+  const page = runWatchPage(1);
+  const click = href => {
+    const link = {getAttribute(name) { return name === 'href' ? href : null; }};
+    const event = {
+      target:{nodeType:1,closest(selector) { return selector === 'a[target="_blank"]' ? link : null; }},
+      prevented:false,
+      stopped:false,
+      preventDefault() { this.prevented = true; },
+      stopImmediatePropagation() { this.stopped = true; }
+    };
+    for (const listener of page.listeners.get('click') || []) listener(event);
+    return event;
+  };
+  const adUrl = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
+  const adClick = click(adUrl);
+  assert.equal(adClick.prevented, true);
+  assert.equal(page.window.openCalls.length, 1);
+  assert.equal(page.window.openCalls[0][0], adUrl);
+  assert.equal(page.window.openCalls[0][1], '_blank');
+
+  const externalClick = click('https://unapproved.example/');
+  assert.equal(externalClick.prevented, true);
+  assert.equal(page.window.openCalls.length, 1);
+  assert.equal(page.window.open('https://unapproved.example/','_blank'), null);
 });
 
 test('fullscreen ad pauses at the exact position and resumes after fifteen seconds', () => {
