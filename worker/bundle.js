@@ -184,7 +184,7 @@ const bootstrapScript = String.raw`(() => {
     const advancedVideos = new WeakSet();
     const adBreakIntervalSeconds = 10 * 60;
     const adBreakDurationSeconds = 5;
-    const adFrameUrl = 'https://aarems.org/1/962ae41308332ad6376e83c9183edfbc';
+    const adLinkUrl = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
     let nextEpisodeUrl = '';
     let nextEpisodeResolved = false;
 
@@ -237,9 +237,16 @@ const bootstrapScript = String.raw`(() => {
       '.akwam-immersive-player button[data-plyr="fullscreen"] .icon--not-pressed,.akwam-immersive-player button[data-plyr="fullscreen"] .label--not-pressed{display:none!important}' +
       '.akwam-immersive-player button[data-plyr="fullscreen"] .icon--pressed,.akwam-immersive-player button[data-plyr="fullscreen"] .label--pressed{display:block!important}' +
       '.akwam-ad-supported:not(.akwam-immersive-player){position:relative!important}' +
-      '.akwam-ad-break{position:absolute!important;inset:0!important;z-index:2147483646!important;display:grid!important;place-items:center!important;overflow:hidden!important;background:#000!important}' +
-      '.akwam-ad-break iframe{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;border:0!important;background:#000!important}' +
-      '.akwam-ad-countdown{position:absolute!important;top:14px!important;left:14px!important;z-index:1!important;padding:8px 12px!important;border:1px solid #ffffff30!important;border-radius:8px!important;color:#fff!important;background:#000b!important;font:600 14px/1.4 system-ui,sans-serif!important;pointer-events:none!important}';
+      '.akwam-ad-break{position:absolute!important;inset:0!important;z-index:2147483646!important;display:grid!important;place-items:center!important;overflow:hidden!important;background:radial-gradient(circle at 50% 35%,#1b2740,#07090f 68%)!important}' +
+      '.akwam-ad-card{display:grid!important;justify-items:center!important;gap:14px!important;width:min(520px,calc(100% - 36px))!important;padding:32px!important;border:1px solid #ffffff2a!important;border-radius:24px!important;background:linear-gradient(145deg,#1c2435,#11141c)!important;box-shadow:0 24px 80px #000a!important;color:#fff!important;text-align:center!important;font:500 15px/1.5 system-ui,sans-serif!important;direction:rtl!important}' +
+      '.akwam-ad-label{padding:5px 10px!important;border-radius:999px!important;background:#ffffff12!important;color:#d5f287!important;font-size:12px!important;font-weight:700!important}' +
+      '.akwam-ad-title{margin:0!important;font-size:clamp(22px,3vw,32px)!important;line-height:1.25!important;font-weight:800!important}' +
+      '.akwam-ad-description{margin:0!important;color:#d0d5df!important;font-size:15px!important;line-height:1.7!important}' +
+      '.akwam-ad-visit{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-height:46px!important;padding:0 24px!important;border-radius:12px!important;background:#d5f287!important;color:#11150f!important;font-size:15px!important;font-weight:800!important;text-decoration:none!important;transition:transform .15s ease,background .15s ease!important}' +
+      '.akwam-ad-visit:hover{transform:translateY(-1px)!important;background:#e3ffa0!important}' +
+      '.akwam-ad-visit:focus-visible{outline:2px solid #fff!important;outline-offset:3px!important}' +
+      '.akwam-ad-countdown{position:absolute!important;top:14px!important;left:14px!important;z-index:2!important;padding:8px 12px!important;border:1px solid #ffffff30!important;border-radius:8px!important;color:#fff!important;background:#000b!important;font:600 14px/1.4 system-ui,sans-serif!important;pointer-events:none!important}' +
+      '@media(max-width:600px){.akwam-ad-card{gap:11px!important;padding:24px 18px!important}.akwam-ad-description{font-size:14px!important}}';
     (document.head || document.documentElement).appendChild(immersiveStyle);
 
     function immersiveDismissKey() {
@@ -360,15 +367,36 @@ const bootstrapScript = String.raw`(() => {
       overlay.setAttribute('role','region');
       overlay.setAttribute('aria-label','إعلان');
 
-      const adFrame = document.createElement('iframe');
-      adFrame.title = 'إعلان';
-      adFrame.setAttribute('sandbox','allow-scripts allow-same-origin allow-forms');
-      adFrame.setAttribute('referrerpolicy','no-referrer');
+      const adCard = document.createElement('div');
+      adCard.className = 'akwam-ad-card';
+      adCard.setAttribute('role','article');
+      adCard.setAttribute('aria-label','إعلان ممول');
+
+      const adLabel = document.createElement('div');
+      adLabel.className = 'akwam-ad-label';
+      adLabel.textContent = 'إعلان ممول';
+      const adTitle = document.createElement('h2');
+      adTitle.className = 'akwam-ad-title';
+      adTitle.textContent = 'قارن عروض الحسابات البنكية';
+      const adDescription = document.createElement('p');
+      adDescription.className = 'akwam-ad-description';
+      adDescription.textContent = 'اطّلع على العروض والرسوم والشروط قبل زيارة الموقع.';
+      const adLink = document.createElement('a');
+      adLink.className = 'akwam-ad-visit';
+      adLink.setAttribute('href',adLinkUrl);
+      adLink.setAttribute('target','_blank');
+      adLink.setAttribute('rel','sponsored noopener noreferrer');
+      adLink.setAttribute('referrerpolicy','no-referrer');
+      adLink.textContent = 'زيارة الإعلان';
 
       const countdownLabel = document.createElement('div');
       countdownLabel.className = 'akwam-ad-countdown';
       countdownLabel.setAttribute('aria-live','assertive');
-      overlay.appendChild(adFrame);
+      adCard.appendChild(adLabel);
+      adCard.appendChild(adTitle);
+      adCard.appendChild(adDescription);
+      adCard.appendChild(adLink);
+      overlay.appendChild(adCard);
       overlay.appendChild(countdownLabel);
 
       let nextAdBreakAt = adBreakIntervalSeconds;
@@ -394,7 +422,6 @@ const bootstrapScript = String.raw`(() => {
       }
 
       function closeAdBreak() {
-        adFrame.src = 'about:blank';
         overlay.remove();
         adActive = false;
         if (!shouldResume) {
@@ -417,7 +444,6 @@ const bootstrapScript = String.raw`(() => {
         secondsRemaining = adBreakDurationSeconds;
         updateCountdown();
         player.appendChild(overlay);
-        adFrame.src = adFrameUrl;
       }
 
       function updatePlaybackProgress(endedEvent=false) {
