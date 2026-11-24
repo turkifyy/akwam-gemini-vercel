@@ -279,15 +279,22 @@ test('fullscreen ad pauses at the exact position and resumes after fifteen secon
 
   const overlay = page.player.children.find(element => element.className === 'akwam-ad-break');
   assert.ok(overlay);
-  const [adCard,countdown] = overlay.children;
-  const [,adTitle,adDescription,adLink] = adCard.children;
-  assert.equal(adCard.attributes.role, 'article');
-  assert.equal(adTitle.textContent, 'قارن عروض الحسابات البنكية');
-  assert.match(adDescription.textContent, /العروض والرسوم والشروط/);
+  const [frameShell,fallback,countdown] = overlay.children;
+  const [adFrame] = frameShell.children;
+  const [fallbackHint,adLink] = fallback.children;
+  assert.equal(adFrame.tagName, 'iframe');
+  assert.equal(adFrame.className, 'akwam-ad-frame');
+  assert.equal(adFrame.src, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
+  assert.equal(adFrame.attributes.title, 'إعلان ممول');
+  assert.equal(adFrame.attributes.loading, 'eager');
+  assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+  assert.equal(fallback.attributes.role, 'note');
+  assert.match(fallbackHint.textContent, /إذا لم يظهر الإعلان داخل الإطار/);
   assert.equal(adLink.attributes.href, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
   assert.equal(adLink.attributes.target, '_blank');
   assert.equal(adLink.attributes.rel, 'sponsored noopener noreferrer');
-  assert.equal(adLink.textContent, 'زيارة الإعلان');
+  assert.equal(adLink.attributes['aria-label'], 'فتح الإعلان في نافذة جديدة');
+  assert.equal(adLink.textContent, 'فتح الإعلان');
   assert.match(countdown.textContent, /15 ثوانٍ$/);
   assert.equal(page.video.paused, true);
   assert.equal(page.video.pauseCalls, 1);
@@ -300,6 +307,7 @@ test('fullscreen ad pauses at the exact position and resumes after fifteen secon
   tick();
 
   assert.equal(page.player.children.includes(overlay), false);
+  assert.equal(adFrame.src, 'about:blank');
   assert.equal(adLink.attributes.href, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
   assert.equal(page.video.currentTime, 600.375);
   assert.equal(page.video.paused, false);
