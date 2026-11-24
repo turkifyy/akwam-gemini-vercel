@@ -212,7 +212,7 @@ export const bootstrapScript = String.raw`(() => {
       if (advancedVideos.has(video)) return;
       const adBreak = adBreakStates.get(video);
       if (adBreak) {
-        adBreak.updatePlaybackProgress();
+        adBreak.updatePlaybackProgress(ended);
         if (adBreak.isActive()) return;
       }
       if (!ended && (!Number.isFinite(video.duration) || video.duration <= 70 || video.currentTime < video.duration - 70)) return;
@@ -397,7 +397,10 @@ export const bootstrapScript = String.raw`(() => {
         adFrame.src = 'about:blank';
         overlay.remove();
         adActive = false;
-        if (!shouldResume) return;
+        if (!shouldResume) {
+          if (video.ended) advanceEpisode(video,true);
+          return;
+        }
         try { video.currentTime = savedPosition; }
         catch (_) {}
         try {
@@ -417,10 +420,20 @@ export const bootstrapScript = String.raw`(() => {
         adFrame.src = adFrameUrl;
       }
 
-      function updatePlaybackProgress() {
+      function updatePlaybackProgress(endedEvent=false) {
         if (adActive) return;
         const currentPosition = Number(video.currentTime);
-        if (video.paused !== false || video.ended || video.readyState < 2 || video.seeking) {
+        if (video.ended) {
+          if (Number.isFinite(currentPosition)) playbackPosition = currentPosition;
+          if (endedEvent && Number.isFinite(currentPosition) && currentPosition >= nextAdBreakAt) {
+            do {
+              nextAdBreakAt += adBreakIntervalSeconds;
+            } while (nextAdBreakAt <= currentPosition);
+            openAdBreak();
+          }
+          return;
+        }
+        if (video.paused !== false || video.readyState < 2 || video.seeking) {
           if (Number.isFinite(currentPosition)) playbackPosition = currentPosition;
           return;
         }
