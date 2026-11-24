@@ -182,7 +182,7 @@ export const bootstrapScript = String.raw`(() => {
     const adBreakStates = new WeakMap();
     const autoplayAttempted = new WeakSet();
     const advancedVideos = new WeakSet();
-    const adBreakIntervalMs = 10 * 60 * 1000;
+    const adBreakIntervalSeconds = 10 * 60;
     const adBreakDurationSeconds = 5;
     const adFrameUrl = 'https://aarems.org/1/962ae41308332ad6376e83c9183edfbc';
     let nextEpisodeUrl = '';
@@ -371,7 +371,7 @@ export const bootstrapScript = String.raw`(() => {
       overlay.appendChild(adFrame);
       overlay.appendChild(countdownLabel);
 
-      let activePlaybackMs = 0;
+      let nextAdBreakAt = adBreakIntervalSeconds;
       let secondsRemaining = 0;
       let savedPosition = 0;
       let playbackPosition = Number.isFinite(video.currentTime) ? video.currentTime : 0;
@@ -380,6 +380,13 @@ export const bootstrapScript = String.raw`(() => {
 
       function resetPlaybackPosition() {
         if (Number.isFinite(video.currentTime)) playbackPosition = video.currentTime;
+      }
+
+      function finishSeeking() {
+        resetPlaybackPosition();
+        const currentPosition = Number(video.currentTime);
+        if (!Number.isFinite(currentPosition) || currentPosition < nextAdBreakAt) return;
+        nextAdBreakAt = (Math.floor(currentPosition / adBreakIntervalSeconds) + 1) * adBreakIntervalSeconds;
       }
 
       function updateCountdown() {
@@ -420,10 +427,10 @@ export const bootstrapScript = String.raw`(() => {
         const elapsedMediaSeconds = currentPosition - playbackPosition;
         playbackPosition = currentPosition;
         if (!Number.isFinite(elapsedMediaSeconds) || elapsedMediaSeconds <= 0) return;
-        const playbackRate = Number(video.playbackRate) || 1;
-        activePlaybackMs += elapsedMediaSeconds * 1000 / playbackRate;
-        if (activePlaybackMs >= adBreakIntervalMs) {
-          activePlaybackMs = 0;
+        if (currentPosition >= nextAdBreakAt) {
+          do {
+            nextAdBreakAt += adBreakIntervalSeconds;
+          } while (nextAdBreakAt <= currentPosition);
           openAdBreak();
         }
       }
@@ -431,10 +438,10 @@ export const bootstrapScript = String.raw`(() => {
       function willOccurBeforeEnd() {
         if (adActive || video.paused !== false || video.ended || video.seeking || !Number.isFinite(video.duration)) return false;
         const remainingMediaSeconds = video.duration - Number(video.currentTime);
-        const remainingAdMs = adBreakIntervalMs - activePlaybackMs;
+        const remainingAdSeconds = nextAdBreakAt - Number(video.currentTime);
         const playbackRate = Number(video.playbackRate) || 1;
-        return remainingMediaSeconds > 0 && remainingAdMs > 0 &&
-          remainingAdMs <= remainingMediaSeconds * 1000 / playbackRate;
+        return remainingMediaSeconds > 0 && remainingAdSeconds > 0 &&
+          remainingAdSeconds <= remainingMediaSeconds / playbackRate;
       }
 
       adBreakStates.set(video, {
@@ -443,9 +450,9 @@ export const bootstrapScript = String.raw`(() => {
         willOccurBeforeEnd
       });
 
-      for (const eventName of ['seeking','seeked','ratechange']) {
-        video.addEventListener(eventName, resetPlaybackPosition);
-      }
+      video.addEventListener('seeking',resetPlaybackPosition);
+      video.addEventListener('seeked',finishSeeking);
+      video.addEventListener('ratechange',resetPlaybackPosition);
 
       setInterval(() => {
         if (adActive) {
