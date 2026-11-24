@@ -27,7 +27,7 @@ function createClassList() {
   };
 }
 
-function runWatchPage(episode, sessionStorage = createStorage()) {
+function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
   const messages = [];
   const listeners = new Map();
   const intervals = [];
@@ -65,7 +65,7 @@ function runWatchPage(episode, sessionStorage = createStorage()) {
     nodeType:1,
     tagName:'VIDEO',
     readyState:4,
-    duration:1800,
+    duration:options.duration ?? 1800,
     currentTime:0,
     playbackRate:1,
     seeking:false,
@@ -132,7 +132,17 @@ function runWatchPage(episode, sessionStorage = createStorage()) {
       }
       return null;
     },
-    querySelectorAll() { return []; },
+    querySelectorAll(selector) {
+      if (selector === 'a[href*="/watch/"]' && options.nextEpisodeUrl) {
+        return [{
+          innerText:'التالي',
+          getAttribute() { return ''; },
+          href:options.nextEpisodeUrl,
+          classList:{contains() { return false; }}
+        }];
+      }
+      return [];
+    },
     addEventListener(name, callback) {
       const callbacks = listeners.get(name) || [];
       callbacks.push(callback);
@@ -143,8 +153,9 @@ function runWatchPage(episode, sessionStorage = createStorage()) {
     href:`https://worker.example/site/en/watch/181288/${episodeId}/show/episode-${episode}`,
     origin:'https://worker.example',
     pathname:`/site/en/watch/181288/${episodeId}/show/episode-${episode}`,
-    assign() {}
+    assign(url) { navigation.push(url); }
   };
+  const navigation = [];
   const window = {
     __AKWAM_BRIDGE__:{lang:'en',parentOrigin:'https://parent.example',upstreamHost:'akwam.ss'},
     fetch:() => Promise.resolve(),
@@ -161,7 +172,7 @@ function runWatchPage(episode, sessionStorage = createStorage()) {
 
   vm.runInNewContext(bootstrapScript, context);
   for (const callback of videoListeners.get('seeked') || []) callback();
-  return {player,button,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners};
+  return {player,button,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners,navigation};
 }
 
 function clickFullscreen(page) {
@@ -256,6 +267,26 @@ test('ad break pauses at the exact position and resumes after five seconds', () 
   assert.equal(page.video.currentTime, 700.375);
   assert.equal(page.video.paused, false);
   assert.equal(page.video.playCalls, 2);
+});
+
+test('ten-minute ad break preempts episode advance and preserves fullscreen', () => {
+  const page = runWatchPage(1, createStorage(), {
+    duration:755,
+    nextEpisodeUrl:'https://worker.example/site/en/watch/181288/102322/show/episode-2'
+  });
+  const tick = page.intervals.find(timer => timer.delay === 1000).callback;
+
+  for (let second = 0; second < 600; second++) {
+    page.video.currentTime += 1;
+    dispatchVideoEvent(page,'timeupdate');
+    if (!page.player.children.some(element => element.className === 'akwam-ad-break')) tick();
+  }
+
+  assert.ok(page.player.children.some(element => element.className === 'akwam-ad-break'));
+  assert.equal(page.navigation.length, 0);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+  assert.equal(page.video.currentTime, 685);
+  assert.equal(page.video.paused, true);
 });
 
 test('paused time does not count toward the next ad break', () => {
