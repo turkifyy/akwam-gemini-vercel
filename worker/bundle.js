@@ -367,8 +367,13 @@ const bootstrapScript = String.raw`(() => {
       let activePlaybackMs = 0;
       let secondsRemaining = 0;
       let savedPosition = 0;
+      let playbackPosition = Number.isFinite(video.currentTime) ? video.currentTime : 0;
       let shouldResume = false;
       let adActive = false;
+
+      function resetPlaybackPosition() {
+        if (Number.isFinite(video.currentTime)) playbackPosition = video.currentTime;
+      }
 
       function updateCountdown() {
         countdownLabel.textContent = 'إعلان — سيستأنف الفيديو خلال ' + secondsRemaining + ' ثوانٍ';
@@ -394,8 +399,12 @@ const bootstrapScript = String.raw`(() => {
         if (shouldResume) video.pause();
         secondsRemaining = adBreakDurationSeconds;
         updateCountdown();
-        adFrame.src = adFrameUrl;
         player.appendChild(overlay);
+        adFrame.src = adFrameUrl;
+      }
+
+      for (const eventName of ['seeking','seeked','ratechange']) {
+        video.addEventListener(eventName, resetPlaybackPosition);
       }
 
       setInterval(() => {
@@ -405,8 +414,16 @@ const bootstrapScript = String.raw`(() => {
           else updateCountdown();
           return;
         }
-        if (video.paused !== false || video.ended || video.readyState < 2) return;
-        activePlaybackMs += 1000;
+        const currentPosition = Number(video.currentTime);
+        if (video.paused !== false || video.ended || video.readyState < 2 || video.seeking) {
+          if (Number.isFinite(currentPosition)) playbackPosition = currentPosition;
+          return;
+        }
+        const elapsedMediaSeconds = currentPosition - playbackPosition;
+        playbackPosition = currentPosition;
+        if (!Number.isFinite(elapsedMediaSeconds) || elapsedMediaSeconds <= 0) return;
+        const playbackRate = Number(video.playbackRate) || 1;
+        activePlaybackMs += elapsedMediaSeconds * 1000 / playbackRate;
         if (activePlaybackMs >= adBreakIntervalMs) {
           activePlaybackMs = 0;
           openAdBreak();
