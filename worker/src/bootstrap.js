@@ -13,6 +13,7 @@ export const bootstrapScript = String.raw`(() => {
   const seriesPage = /^\/series\/\d+(?:\/|$)/.test(pagePath);
   const prefix = location.origin + routePath;
   const adLinkUrl = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
+  const adBridgeUrl = String(config.adBridgeUrl || '');
   const originalFetch = window.fetch.bind(window);
   const originalOpen = typeof window.open === 'function' ? window.open.bind(window) : () => null;
 
@@ -460,7 +461,7 @@ export const bootstrapScript = String.raw`(() => {
         secondsRemaining = adBreakDurationSeconds;
         updateCountdown();
         player.appendChild(overlay);
-        adFrame.src = adLinkUrl;
+        adFrame.src = adBridgeUrl || adLinkUrl;
       }
 
       function updatePlaybackProgress(endedEvent=false) {

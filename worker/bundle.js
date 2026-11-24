@@ -13,6 +13,7 @@ const bootstrapScript = String.raw`(() => {
   const seriesPage = /^\/series\/\d+(?:\/|$)/.test(pagePath);
   const prefix = location.origin + routePath;
   const adLinkUrl = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
+  const adBridgeUrl = String(config.adBridgeUrl || '');
   const originalFetch = window.fetch.bind(window);
   const originalOpen = typeof window.open === 'function' ? window.open.bind(window) : () => null;
 
@@ -460,7 +461,7 @@ const bootstrapScript = String.raw`(() => {
         secondsRemaining = adBreakDurationSeconds;
         updateCountdown();
         player.appendChild(overlay);
-        adFrame.src = adLinkUrl;
+        adFrame.src = adBridgeUrl || adLinkUrl;
       }
 
       function updatePlaybackProgress(endedEvent=false) {
@@ -1416,6 +1417,7 @@ const translatorScript = String.raw`(() => {
 
 
 const DEFAULT_UPSTREAM = 'akwam.ss';
+const AD_LINK_URL = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
 const ALLOWED_LANGUAGES = new Set(['ar','en','tr','fr','de','es','it','pt','ru','fa','ur','hi','id','ja','ko','zh-CN']);
 const SEO_CATEGORIES = new Map([
   ['30',{slug:'foreign',title:'مسلسلات عالمية مترجمة | Turkify Series',heading:'مسلسلات عالمية',description:'تصفح تصنيف المسلسلات العالمية المترجمة، واكتشف العناوين والتقييمات وتفاصيل الحلقات على Turkify Series.'}],
@@ -1440,10 +1442,22 @@ const worker = {
     if (url.pathname === '/api/translate') return handleTranslate(request, env);
     if (url.pathname === '/__bridge/bootstrap.js') return javascript(bootstrapScript);
     if (url.pathname === '/__bridge/translator.js') return javascript(translatorScript);
+    if (url.pathname === '/__bridge/ad') return handleAdBridge(request);
     if (url.pathname === '/site' || url.pathname.startsWith('/site/')) return proxyAkwam(request, env, url);
     return json({error:'Not found'}, 404);
   }
 };
+
+function handleAdBridge(request) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Method not allowed', {status:405, headers:{Allow:'GET, HEAD','Cache-Control':'no-store'}});
+  }
+  return new Response(null, {status:302, headers:{
+    Location:AD_LINK_URL,
+    'Cache-Control':'no-store',
+    'Referrer-Policy':'strict-origin-when-cross-origin'
+  }});
+}
 
 function allowedParents(env) {
   return new Set(String(env.ALLOWED_PARENT_ORIGINS || '').split(',').map(value => {
@@ -1686,7 +1700,7 @@ async function proxyAkwam(request, env, url) {
   if (contentType.includes('text/html')) {
     outHeaders.set('Content-Security-Policy', "frame-ancestors 'self'" + (parentOrigin ? ' ' + parentOrigin : ''));
     const bridgeParent = seoMode ? '' : parentOrigin;
-    const inlineConfig = '<script>window.__AKWAM_BRIDGE__=' + JSON.stringify({lang,parentOrigin:bridgeParent,upstreamHost,seoMode}) + ';</script>' +
+    const inlineConfig = '<script>window.__AKWAM_BRIDGE__=' + JSON.stringify({lang,parentOrigin:bridgeParent,upstreamHost,seoMode,adBridgeUrl:workerOrigin + '/__bridge/ad'}) + ';</script>' +
       '<script src="' + workerOrigin + '/__bridge/bootstrap.js"></script>';
     const rewriter = new HTMLRewriter()
       .on('script[src]', {element(element) {
