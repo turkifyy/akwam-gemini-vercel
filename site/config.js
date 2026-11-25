@@ -58,7 +58,6 @@ function installPlayerFullscreenBridge() {
     syncImmersive();
   });
 
-  frame.addEventListener('load', releaseImmersive);
   window.addEventListener('pagehide', releaseImmersive);
 }
 

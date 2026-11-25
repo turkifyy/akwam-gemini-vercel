@@ -29,6 +29,7 @@ function createClassList() {
 
 function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
   const messages = [];
+  const windowListeners = new Map();
   const clock = options.clock || {now:1700000000000};
   const listeners = new Map();
   let fullscreenElement = null;
@@ -149,6 +150,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
       if (selector === '.main-header .row') return searchRow;
       if (selector === '.search-box') return searchBox;
       if (selector === '.user-profile-container') return userProfile;
+      if (selector === '.plyr') return player;
       if (selector === '.akwam-mobile-search-button') return null;
       if (selector.includes('/series/')) return seriesLink;
       if (selector.includes('/episode/')) return episodeLink;
@@ -187,7 +189,11 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
     openCalls:[],
     open(...args) { this.openCalls.push(args); return {}; },
     parent:{postMessage(message, target) { messages.push({message,target}); }},
-    addEventListener() {}
+    addEventListener(name, callback) {
+      const callbacks = windowListeners.get(name) || [];
+      callbacks.push(callback);
+      windowListeners.set(name, callbacks);
+    }
   };
   class MutationObserver { observe() {} }
   class XMLHttpRequest { open() {} }
@@ -201,7 +207,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
 
   vm.runInNewContext(bootstrapScript, context);
   for (const callback of videoListeners.get('seeked') || []) callback();
-  return {player,body,button,document,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners,navigation,window,clock,setFullscreenElement(value) { fullscreenElement = value; dispatchDocumentEvent('fullscreenchange'); }};
+  return {player,body,button,document,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners,navigation,window,windowListeners,clock,setFullscreenElement(value) { fullscreenElement = value; dispatchDocumentEvent('fullscreenchange'); }};
 }
 
 function clickFullscreen(page) {
@@ -585,15 +591,11 @@ test('parent bridge expands the iframe and restores navigation on exit', async (
   const configSource = await readFile(new URL('../../site/config.js', import.meta.url), 'utf8');
   const documentListeners = new Map();
   const windowListeners = new Map();
-  const frameLoadListeners = new Map();
   const frameStyle = {
     top:'',height:'',zIndex:'',
     removeProperty(name) { this[name === 'z-index' ? 'zIndex' : name] = ''; }
   };
-  const frame = {
-    contentWindow:{},style:frameStyle,
-    addEventListener(name, callback) { frameLoadListeners.set(name, callback); }
-  };
+  const frame = {contentWindow:{},style:frameStyle};
   const nav = {hidden:false,style:{display:''}};
   let fullscreenElement = null;
   const document = {
@@ -641,9 +643,6 @@ test('parent bridge expands the iframe and restores navigation on exit', async (
   nativeFullscreen(true);
   nativeFullscreen(false);
   send({source:'akwam-gemini-bridge',type:'player-immersive',active:true});
-  assert.equal(nav.hidden, false);
-
-  frameLoadListeners.get('load')();
   assert.equal(nav.hidden, false);
 });
 
