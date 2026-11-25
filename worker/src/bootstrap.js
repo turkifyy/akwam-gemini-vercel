@@ -191,6 +191,7 @@ export const bootstrapScript = String.raw`(() => {
     const introSkipPending = new WeakSet();
     const introSkipAttempted = new WeakSet();
     const advancedVideos = new WeakSet();
+    const lastPlaybackPositions = new WeakMap();
     const nativeFullscreenUnavailable = new WeakSet();
     let nativeFullscreenPlayer = null;
     const adBreakIntervalSeconds = 10 * 60;
@@ -233,7 +234,17 @@ export const bootstrapScript = String.raw`(() => {
         adBreak.updatePlaybackProgress(ended);
         if (adBreak.isActive()) return;
       }
-      if (!ended && (!Number.isFinite(video.duration) || video.duration <= 70 || video.currentTime < video.duration - 70)) return;
+      const currentPosition = Number(video.currentTime);
+      const previousPosition = lastPlaybackPositions.get(video);
+      if (!Number.isFinite(currentPosition)) return;
+      lastPlaybackPositions.set(video,currentPosition);
+      if (!ended) {
+        const threshold = video.duration - 70;
+        const crossedThresholdDuringPlayback = Number.isFinite(video.duration) && video.duration > 70 &&
+          Number.isFinite(previousPosition) && previousPosition < threshold && currentPosition >= threshold &&
+          video.paused === false && !video.seeking;
+        if (!crossedThresholdDuringPlayback) return;
+      }
       if (!ended && adBreak?.willOccurBeforeEnd()) return;
       const nextUrl = resolveNextEpisode();
       if (!nextUrl) return;
@@ -403,8 +414,12 @@ export const bootstrapScript = String.raw`(() => {
         try {
           if (typeof video.fastSeek === 'function') video.fastSeek(85);
           else video.currentTime = 85;
+          lastPlaybackPositions.set(video,85);
         } catch (_) {
-          try { video.currentTime = 85; }
+          try {
+            video.currentTime = 85;
+            lastPlaybackPositions.set(video,85);
+          }
           catch (_) {
             introSkipPending.delete(video);
             introSkipAttempted.delete(video);
@@ -901,10 +916,12 @@ export const bootstrapScript = String.raw`(() => {
       installAdBreak(video);
       if (attachedVideos.has(video)) return;
       attachedVideos.add(video);
+      lastPlaybackPositions.set(video,Number(video.currentTime));
       video.addEventListener("seeking", () => {
-        if (!introSkipPending.has(video) && video.currentTime < 85) introSkipAttempted.delete(video);
+        lastPlaybackPositions.set(video,Number(video.currentTime));
       });
       video.addEventListener("seeked", () => {
+        lastPlaybackPositions.set(video,Number(video.currentTime));
         introSkipPending.delete(video);
         skipEpisodeIntro(video);
         autoplayEpisode(video);

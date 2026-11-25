@@ -383,6 +383,44 @@ test('playing from minute nine triggers the minute-ten ad before episode advance
   assert.equal(page.video.paused, true);
 });
 
+test('seeking near the episode end does not advance or exit fullscreen', () => {
+  const nextEpisodeUrl = 'https://worker.example/site/en/watch/181288/102322/show/episode-2';
+  const page = runWatchPage(1, undefined, {
+    duration:2000,
+    nextEpisodeUrl,
+    nativeFullscreen:true
+  });
+  clickFullscreen(page);
+  page.video.currentTime = 1970;
+  page.video.seeking = true;
+  dispatchVideoEvent(page,'seeking');
+  page.video.seeking = false;
+  dispatchVideoEvent(page,'seeked');
+  dispatchVideoEvent(page,'timeupdate');
+
+  assert.deepEqual(page.navigation, []);
+  assert.equal(page.document.fullscreenElement, page.player);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+});
+
+test('natural playback crossing the episode-end threshold advances', () => {
+  const nextEpisodeUrl = 'https://worker.example/site/en/watch/181288/102322/show/episode-2';
+  const page = runWatchPage(1, undefined, {duration:2000,nextEpisodeUrl});
+  page.video.paused = false;
+  page.video.currentTime = 1900;
+  page.video.seeking = true;
+  dispatchVideoEvent(page,'seeking');
+  page.video.seeking = false;
+  dispatchVideoEvent(page,'seeked');
+  page.video.currentTime = 1929;
+  dispatchVideoEvent(page,'timeupdate');
+  assert.deepEqual(page.navigation, []);
+
+  page.video.currentTime = 1930;
+  dispatchVideoEvent(page,'timeupdate');
+  assert.deepEqual(page.navigation, [nextEpisodeUrl]);
+});
+
 test('an episode ending at the ad mark waits for the ad before advancing', () => {
   const page = runWatchPage(1, createStorage(), {
     duration:600,
