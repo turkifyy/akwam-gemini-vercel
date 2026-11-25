@@ -127,7 +127,7 @@ test("videos inserted after page load are handled", () => {
   assert.equal(video.playCalls, 1);
 });
 
-test("a later seek back to the intro is corrected", () => {
+test("a manual seek back to the intro is preserved", () => {
   const video = makeVideo();
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
   video.emit("seeking");
@@ -138,8 +138,8 @@ test("a later seek back to the intro is corrected", () => {
   video.emit("seeking");
   video.seeking = false;
   video.emit("seeked");
-  assert.equal(video.currentTime, 85);
-  assert.equal(video.fastSeekCalls, 2);
+  assert.equal(video.currentTime, 0);
+  assert.equal(video.fastSeekCalls, 1);
 });
 
 test("currentTime is used when fastSeek is unavailable", () => {
