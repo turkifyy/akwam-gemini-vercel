@@ -30,6 +30,10 @@ function createClassList() {
 function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
   const messages = [];
   const listeners = new Map();
+  let fullscreenElement = null;
+  const dispatchDocumentEvent = name => {
+    for (const callback of listeners.get(name) || []) callback();
+  };
   const intervals = [];
   const mobileSearchStyles = [];
   const searchToggle = {clickCount:0,click() { this.clickCount += 1; }};
@@ -60,6 +64,15 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
     appendChild(element) { this.children.push(element); element.parentElement = this; return element; },
     querySelector(selector) { return selector === 'button[data-plyr="fullscreen"]' ? button : null; }
   };
+  if (options.nativeFullscreen) {
+    player.requestFullscreen = function (settings) {
+      this.fullscreenOptions = settings;
+      if (options.rejectFullscreen) return Promise.reject(new Error('Fullscreen unavailable'));
+      fullscreenElement = this;
+      dispatchDocumentEvent('fullscreenchange');
+      return Promise.resolve();
+    };
+  }
   const body = {
     children:[],
     appendChild(element) { this.children.push(element); element.parentElement = this; return element; }
@@ -103,6 +116,12 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
     readyState:'complete',
     documentElement:root,
     body,
+    get fullscreenElement() { return fullscreenElement; },
+    exitFullscreen() {
+      fullscreenElement = null;
+      dispatchDocumentEvent('fullscreenchange');
+      return Promise.resolve();
+    },
     head:{appendChild(element) { mobileSearchStyles.push(element); }},
     createElement(tagName) {
       const element = {
@@ -179,7 +198,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
 
   vm.runInNewContext(bootstrapScript, context);
   for (const callback of videoListeners.get('seeked') || []) callback();
-  return {player,body,button,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners,navigation,window};
+  return {player,body,button,document,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners,navigation,window};
 }
 
 function clickFullscreen(page) {
@@ -326,6 +345,21 @@ test('fullscreen ad pauses at the exact position and resumes after fifteen secon
   assert.equal(page.video.playCalls, 1);
 });
 
+test('native fullscreen ad stays inside the fullscreen player above the video', () => {
+  const page = runWatchPage(1, undefined, {nativeFullscreen:true});
+  clickFullscreen(page);
+  page.video.currentTime = 599;
+  page.video.currentTime += 1;
+  dispatchVideoEvent(page,'timeupdate');
+
+  const overlay = getAdBreak(page);
+  assert.ok(overlay);
+  assert.equal(page.document.fullscreenElement, page.player);
+  assert.equal(page.player.children.includes(overlay), true);
+  assert.equal(page.body.children.includes(overlay), false);
+  assert.equal(overlay.className, 'akwam-ad-break akwam-ad-break-immersive');
+});
+
 test('playing from minute nine triggers the minute-ten ad before episode advance in fullscreen', () => {
   const page = runWatchPage(1, createStorage(), {
     duration:670,
@@ -427,6 +461,33 @@ test('manual toggle can re-enable immersive mode', () => {
   clickFullscreen(page);
   clickFullscreen(page);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+});
+
+test('fullscreen button requests native browser fullscreen and Escape exits it', () => {
+  const page = runWatchPage(1, undefined, {nativeFullscreen:true});
+  clickFullscreen(page);
+
+  assert.equal(page.document.fullscreenElement, page.player);
+  assert.equal(page.player.fullscreenOptions.navigationUI, 'hide');
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+
+  page.listeners.get('keydown').at(-1)({
+    key:'Escape',preventDefault() {},stopImmediatePropagation() {}
+  });
+  assert.equal(page.document.fullscreenElement, null);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
+});
+
+test('rejected native fullscreen keeps the CSS fallback and allows manual exit', async () => {
+  const page = runWatchPage(1, undefined, {nativeFullscreen:true,rejectFullscreen:true});
+  clickFullscreen(page);
+  await Promise.resolve();
+
+  assert.equal(page.document.fullscreenElement, null);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+
+  clickFullscreen(page);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
 });
 
 test('parent bridge expands the iframe and restores navigation on exit', async () => {

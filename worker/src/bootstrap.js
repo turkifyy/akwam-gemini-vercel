@@ -191,6 +191,8 @@ export const bootstrapScript = String.raw`(() => {
     const introSkipPending = new WeakSet();
     const introSkipAttempted = new WeakSet();
     const advancedVideos = new WeakSet();
+    const nativeFullscreenUnavailable = new WeakSet();
+    let nativeFullscreenPlayer = null;
     const adBreakIntervalSeconds = 10 * 60;
     const adBreakDurationSeconds = 15;
     document.addEventListener('click', event => {
@@ -309,6 +311,51 @@ export const bootstrapScript = String.raw`(() => {
       }
     }
 
+    function togglePlayerFullscreen(player) {
+      if (document.fullscreenElement === player) {
+        try {
+          const exit = document.exitFullscreen();
+          if (exit && typeof exit.catch === 'function') exit.catch(() => {});
+        } catch (_) {}
+        return;
+      }
+      if (nativeFullscreenPlayer === player) return;
+      if (nativeFullscreenUnavailable.has(player)) {
+        nativeFullscreenUnavailable.delete(player);
+        setImmersive(player,false,true);
+        return;
+      }
+
+      const requestFullscreen = player.requestFullscreen;
+      if (typeof requestFullscreen !== 'function') {
+        setImmersive(player,!player.classList.contains('akwam-immersive-player'),true);
+        return;
+      }
+
+      setImmersive(player,true,true);
+      nativeFullscreenPlayer = player;
+      try {
+        const request = requestFullscreen.call(player,{navigationUI:'hide'});
+        if (request && typeof request.catch === 'function') {
+          request.catch(() => {
+            if (nativeFullscreenPlayer === player) nativeFullscreenPlayer = null;
+            nativeFullscreenUnavailable.add(player);
+          });
+        }
+      } catch (_) {
+        nativeFullscreenPlayer = null;
+        nativeFullscreenUnavailable.add(player);
+      }
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+      if (!nativeFullscreenPlayer || document.fullscreenElement === nativeFullscreenPlayer) return;
+      const player = nativeFullscreenPlayer;
+      nativeFullscreenPlayer = null;
+      nativeFullscreenUnavailable.delete(player);
+      setImmersive(player,false,true);
+    }, true);
+
     function currentEpisodeNumber() {
       const episodeLink = document.querySelector('h2 a[href*="/episode/"], .breadcrumb a[href*="/episode/"], a[href*="/episode/"]');
       const labelNumber = String(episodeLink?.innerText || '').match(/\d+/g)?.at(-1);
@@ -333,7 +380,7 @@ export const bootstrapScript = String.raw`(() => {
       if (!player) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      setImmersive(player, !player.classList.contains('akwam-immersive-player'), true);
+      togglePlayerFullscreen(player);
     }, true);
 
     document.addEventListener('keydown', event => {
@@ -342,7 +389,14 @@ export const bootstrapScript = String.raw`(() => {
       if (!player) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      setImmersive(player, false, true);
+      if (document.fullscreenElement === player) {
+        try {
+          const exit = document.exitFullscreen();
+          if (exit && typeof exit.catch === 'function') exit.catch(() => {});
+        } catch (_) {}
+      } else {
+        setImmersive(player, false, true);
+      }
     }, true);
 
     function skipEpisodeIntro(video) {
@@ -485,7 +539,10 @@ export const bootstrapScript = String.raw`(() => {
         if (shouldResume) video.pause();
         secondsRemaining = adBreakDurationSeconds;
         updateCountdown();
-        if (player.classList.contains('akwam-immersive-player')) {
+        if (document.fullscreenElement === player) {
+          overlay.className = 'akwam-ad-break akwam-ad-break-immersive';
+          player.appendChild(overlay);
+        } else if (player.classList.contains('akwam-immersive-player')) {
           overlay.className = 'akwam-ad-break akwam-ad-break-immersive';
           (document.body || document.documentElement).appendChild(overlay);
         } else {
@@ -814,7 +871,7 @@ export const bootstrapScript = String.raw`(() => {
         }
       });
       fullscreenButton.addEventListener('click',() => {
-        setImmersive(player,!player.classList.contains('akwam-immersive-player'),true);
+        togglePlayerFullscreen(player);
       });
       const pipAvailable = Boolean(document.pictureInPictureEnabled && typeof video.requestPictureInPicture === 'function');
       pipButton.addEventListener('click',async () => {
