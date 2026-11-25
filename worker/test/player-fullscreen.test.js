@@ -307,22 +307,17 @@ test('fullscreen ad pauses at the exact position and resumes after fifteen secon
 
   const overlay = getAdBreak(page);
   assert.ok(overlay);
-  const [frameShell,fallback,countdown] = overlay.children;
+  const [frameShell,countdown] = overlay.children;
   const [adFrame] = frameShell.children;
-  const [fallbackHint,adLink] = fallback.children;
+  assert.equal(overlay.children.length, 2);
   assert.equal(adFrame.tagName, 'iframe');
   assert.equal(adFrame.className, 'akwam-ad-frame');
   assert.equal(adFrame.src, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
   assert.equal(adFrame.attributes.title, 'إعلان ممول');
   assert.equal(adFrame.attributes.loading, 'eager');
   assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
-  assert.equal(fallback.attributes.role, 'note');
-  assert.match(fallbackHint.textContent, /إذا لم يظهر الإعلان داخل الإطار/);
-  assert.equal(adLink.attributes.href, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
-  assert.equal(adLink.attributes.target, '_blank');
-  assert.equal(adLink.attributes.rel, 'sponsored noopener noreferrer');
-  assert.equal(adLink.attributes['aria-label'], 'فتح الإعلان في نافذة جديدة');
-  assert.equal(adLink.textContent, 'فتح الإعلان');
+  assert.equal(frameShell.className, 'akwam-ad-frame-shell');
+  assert.equal(frameShell.children.length, 1);
   assert.match(countdown.textContent, /15 ثوانٍ$/);
   assert.equal(page.video.paused, true);
   assert.equal(page.video.pauseCalls, 1);
@@ -330,7 +325,11 @@ test('fullscreen ad pauses at the exact position and resumes after fifteen secon
   assert.equal(page.body.children.includes(overlay), true);
   assert.equal(page.player.children.includes(overlay), false);
   assert.equal(overlay.className, 'akwam-ad-break akwam-ad-break-immersive');
-  assert.match(page.mobileSearchStyles.map(style => style.textContent).join('\n'), /\.akwam-ad-break-immersive\{position:fixed!important;inset:0!important;z-index:2147483647!important\}/);
+  const playerStyles = page.mobileSearchStyles.map(style => style.textContent).join('\n');
+  assert.match(playerStyles, /\.akwam-ad-break-immersive\{position:fixed!important;inset:0!important;z-index:2147483647!important\}/);
+  assert.match(playerStyles, /\.akwam-ad-frame-shell\{position:absolute!important;inset:10px!important;/);
+  assert.match(playerStyles, /\.akwam-ad-frame-shell\{inset:8px!important;/);
+  assert.doesNotMatch(playerStyles, /akwam-ad-(?:fallback|hint|visit)/);
 
   for (let second = 0; second < 14; second++) tick();
   assert.ok(page.body.children.includes(overlay));
@@ -339,7 +338,6 @@ test('fullscreen ad pauses at the exact position and resumes after fifteen secon
 
   assert.equal(page.body.children.includes(overlay), false);
   assert.equal(adFrame.src, 'about:blank');
-  assert.equal(adLink.attributes.href, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
   assert.equal(page.video.currentTime, 600.375);
   assert.equal(page.video.paused, false);
   assert.equal(page.video.playCalls, 1);

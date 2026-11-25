@@ -257,15 +257,10 @@ export const bootstrapScript = String.raw`(() => {
       '.akwam-ad-supported:not(.akwam-immersive-player){position:relative!important}' +
       '.akwam-ad-break{position:absolute!important;inset:0!important;z-index:2147483646!important;display:grid!important;place-items:center!important;overflow:hidden!important;background:radial-gradient(circle at 50% 35%,#1b2740,#07090f 68%)!important}' +
       '.akwam-ad-break-immersive{position:fixed!important;inset:0!important;z-index:2147483647!important}' +
-      '.akwam-ad-frame-shell{position:absolute!important;inset:10px 10px 72px!important;overflow:hidden!important;border:1px solid #ffffff30!important;border-radius:12px!important;background:#fff!important;box-shadow:0 18px 64px #000b!important}' +
+      '.akwam-ad-frame-shell{position:absolute!important;inset:10px!important;overflow:hidden!important;border:1px solid #ffffff30!important;border-radius:12px!important;background:#fff!important;box-shadow:0 18px 64px #000b!important}' +
       '.akwam-ad-frame{display:block!important;width:100%!important;height:100%!important;border:0!important;background:#fff!important}' +
-      '.akwam-ad-fallback{position:absolute!important;left:12px!important;right:12px!important;bottom:12px!important;z-index:3!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;min-height:48px!important;padding:6px 8px 6px 14px!important;border:1px solid #ffffff2a!important;border-radius:10px!important;background:#0b0f15ed!important;color:#eef1f6!important;box-shadow:0 8px 28px #0009!important;font:500 13px/1.4 system-ui,sans-serif!important;direction:rtl!important;backdrop-filter:blur(10px)!important}' +
-      '.akwam-ad-hint{flex:1 1 auto!important;min-width:0!important;color:#d8dee8!important}' +
-      '.akwam-ad-visit{display:inline-flex!important;flex:0 0 auto!important;align-items:center!important;justify-content:center!important;min-height:38px!important;padding:0 16px!important;border-radius:8px!important;background:#d5f287!important;color:#11150f!important;font-size:13px!important;font-weight:800!important;text-decoration:none!important;transition:transform .15s ease,background .15s ease!important}' +
-      '.akwam-ad-visit:hover{transform:translateY(-1px)!important;background:#e3ffa0!important}' +
-      '.akwam-ad-visit:focus-visible{outline:2px solid #fff!important;outline-offset:3px!important}' +
       '.akwam-ad-countdown{position:absolute!important;top:14px!important;left:14px!important;z-index:4!important;padding:8px 12px!important;border:1px solid #ffffff30!important;border-radius:8px!important;color:#fff!important;background:#000b!important;font:600 14px/1.4 system-ui,sans-serif!important;pointer-events:none!important}' +
-      '@media(max-width:600px){.akwam-ad-frame-shell{inset:8px 8px 84px!important;border-radius:8px!important}.akwam-ad-fallback{left:8px!important;right:8px!important;bottom:8px!important;gap:8px!important;min-height:58px!important;padding:6px 7px!important;font-size:11px!important}.akwam-ad-visit{min-height:38px!important;padding:0 12px!important;font-size:12px!important}.akwam-ad-countdown{top:12px!important;left:12px!important;padding:6px 9px!important;font-size:12px!important}}';
+      '@media(max-width:600px){.akwam-ad-frame-shell{inset:8px!important;border-radius:8px!important}.akwam-ad-countdown{top:12px!important;left:12px!important;padding:6px 9px!important;font-size:12px!important}}';
     (document.head || document.documentElement).appendChild(immersiveStyle);
 
     function immersiveDismissKey() {
@@ -471,27 +466,10 @@ export const bootstrapScript = String.raw`(() => {
       adFrame.src = 'about:blank';
       adFrameShell.appendChild(adFrame);
 
-      const fallback = document.createElement('div');
-      fallback.className = 'akwam-ad-fallback';
-      fallback.setAttribute('role','note');
-      const fallbackHint = document.createElement('span');
-      fallbackHint.className = 'akwam-ad-hint';
-      fallbackHint.textContent = 'إذا لم يظهر الإعلان داخل الإطار، افتحه مباشرةً.';
-      const adLink = document.createElement('a');
-      adLink.className = 'akwam-ad-visit';
-      adLink.setAttribute('href',adLinkUrl);
-      adLink.setAttribute('target','_blank');
-      adLink.setAttribute('rel','sponsored noopener noreferrer');
-      adLink.setAttribute('aria-label','فتح الإعلان في نافذة جديدة');
-      adLink.textContent = 'فتح الإعلان';
-      fallback.appendChild(fallbackHint);
-      fallback.appendChild(adLink);
-
       const countdownLabel = document.createElement('div');
       countdownLabel.className = 'akwam-ad-countdown';
       countdownLabel.setAttribute('aria-live','assertive');
       overlay.appendChild(adFrameShell);
-      overlay.appendChild(fallback);
       overlay.appendChild(countdownLabel);
 
       let nextAdBreakAt = adBreakIntervalSeconds;
