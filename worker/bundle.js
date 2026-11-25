@@ -209,6 +209,60 @@ const bootstrapScript = String.raw`(() => {
     }, true);
     let nextEpisodeUrl = '';
     let nextEpisodeResolved = false;
+    const screenOrientation = (() => {
+      try { return typeof screen !== 'undefined' && screen && screen.orientation ? screen.orientation : null; }
+      catch (_) { return null; }
+    })();
+    let manualFullscreenExit = false;
+    let playerWasFullscreen = false;
+
+    function lockOrientation(mode) {
+      if (!screenOrientation || typeof screenOrientation.lock !== 'function') return Promise.resolve(false);
+      try {
+        return Promise.resolve(screenOrientation.lock(mode)).then(() => true, () => false);
+      } catch (_) {
+        return Promise.resolve(false);
+      }
+    }
+
+    function lockFullscreenLandscape() {
+      lockOrientation('landscape');
+    }
+
+    function restorePlatformPortrait() {
+      if (screenOrientation && typeof screenOrientation.unlock === 'function') {
+        try { screenOrientation.unlock(); } catch (_) {}
+      }
+      const applyPortrait = () => lockOrientation('portrait');
+      applyPortrait();
+      if (typeof setTimeout === 'function') setTimeout(applyPortrait, 180);
+    }
+
+    function autoFullscreenAllowed() {
+      return !manualFullscreenExit && !immersiveDismissed();
+    }
+
+    function autoFullscreenForPlayback(video) {
+      if (!autoFullscreenAllowed()) return;
+      const player = video.closest('.plyr');
+      if (!player || document.fullscreenElement === player || nativeFullscreenPlayer === player) return;
+      const requestFullscreen = player.requestFullscreen;
+      if (typeof requestFullscreen !== 'function') return;
+      setImmersive(player,true,false);
+      nativeFullscreenPlayer = player;
+      try {
+        const request = requestFullscreen.call(player,{navigationUI:'hide'});
+        if (request && typeof request.catch === 'function') {
+          request.catch(() => {
+            if (nativeFullscreenPlayer === player) nativeFullscreenPlayer = null;
+            setImmersive(player,true,false);
+          });
+        }
+      } catch (_) {
+        nativeFullscreenPlayer = null;
+        setImmersive(player,true,false);
+      }
+    }
 
     function resolveNextEpisode() {
       if (nextEpisodeResolved) return nextEpisodeUrl;
@@ -336,25 +390,62 @@ const bootstrapScript = String.raw`(() => {
       } catch (_) {}
     }
 
-    function togglePlayerFullscreen(player) {
+    function exitPlayerFullscreen(player) {
+      manualFullscreenExit = true;
+      setImmersive(player,false,true);
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (document.fullscreenElement === player) exitNativeFullscreen();
+        restorePlatformPortrait();
+      };
+      if (!screenOrientation || typeof screenOrientation.lock !== 'function' || typeof setTimeout !== 'function') {
+        finish();
+        return;
+      }
+      // Browsers only grant an orientation lock while a document is fullscreen, so lock
+      // portrait before leaving fullscreen. The device is then already upright when the
+      // browser chrome returns and the platform never lands back in landscape.
+      lockOrientation('portrait').then(locked => {
+        if (!locked) {
+          // The parent page shares the same screen and may still hold the lock right,
+          // so give it a moment to rotate before the player leaves fullscreen.
+          setTimeout(finish, 260);
+          return;
+        }
+        try { screenOrientation.addEventListener?.('change', finish, {once:true}); } catch (_) {}
+        setTimeout(finish, 320);
+      });
+      setTimeout(finish, 650);
+    }
+
+    function togglePlayerFullscreen(player, manual = true) {
       if (document.fullscreenElement === player) {
-        exitNativeFullscreen();
+        exitPlayerFullscreen(player);
         return;
       }
       if (nativeFullscreenPlayer === player) return;
       if (nativeFullscreenUnavailable.has(player)) {
         nativeFullscreenUnavailable.delete(player);
         setImmersive(player,false,true);
+        manualFullscreenExit = true;
+        restorePlatformPortrait();
         return;
       }
 
       const requestFullscreen = player.requestFullscreen;
       if (typeof requestFullscreen !== 'function') {
-        setImmersive(player,!player.classList.contains('akwam-immersive-player'),true);
+        const active = player.classList.contains('akwam-immersive-player');
+        setImmersive(player,!active,true);
+        if (active) {
+          manualFullscreenExit = true;
+          restorePlatformPortrait();
+        }
         return;
       }
 
-      setImmersive(player,true,true);
+      setImmersive(player,true,manual);
       nativeFullscreenPlayer = player;
       try {
         const request = requestFullscreen.call(player,{navigationUI:'hide'});
@@ -371,11 +462,25 @@ const bootstrapScript = String.raw`(() => {
     }
 
     document.addEventListener('fullscreenchange', () => {
-      if (!nativeFullscreenPlayer || document.fullscreenElement === nativeFullscreenPlayer) return;
+      if (document.fullscreenElement) {
+        const element = document.fullscreenElement;
+        const player = nativeFullscreenPlayer === element || element.classList?.contains('plyr') ? element : null;
+        if (player) {
+          playerWasFullscreen = true;
+          lockFullscreenLandscape();
+        }
+        return;
+      }
+      if (!playerWasFullscreen) return;
+      playerWasFullscreen = false;
       const player = nativeFullscreenPlayer;
       nativeFullscreenPlayer = null;
-      nativeFullscreenUnavailable.delete(player);
-      setImmersive(player,false,true);
+      if (player) {
+        nativeFullscreenUnavailable.delete(player);
+        setImmersive(player,false,true);
+      }
+      manualFullscreenExit = true;
+      restorePlatformPortrait();
     }, true);
 
     function currentEpisodeNumber() {
@@ -412,10 +517,12 @@ const bootstrapScript = String.raw`(() => {
       event.preventDefault();
       event.stopImmediatePropagation();
       if (document.fullscreenElement === player) {
-        exitNativeFullscreen();
+        exitPlayerFullscreen(player);
       } else {
         nativeFullscreenUnavailable.delete(player);
         setImmersive(player, false, true);
+        manualFullscreenExit = true;
+        restorePlatformPortrait();
       }
     }, true);
 
@@ -838,6 +945,7 @@ const bootstrapScript = String.raw`(() => {
       }
       function togglePlayback() {
         if (video.paused || video.ended) {
+          autoFullscreenForPlayback(video);
           try { const playback = video.play(); if (playback?.catch) playback.catch(() => {}); }
           catch (_) {}
         } else {
@@ -951,6 +1059,9 @@ const bootstrapScript = String.raw`(() => {
           autoplayEpisode(video);
         });
       }
+      video.addEventListener("play", () => {
+        autoFullscreenForPlayback(video);
+      });
       video.addEventListener("playing", () => {
         autoplayPending.delete(video);
         autoplayStarted.add(video);

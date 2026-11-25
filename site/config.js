@@ -12,6 +12,23 @@ function installPlayerFullscreenBridge() {
   let frameImmersive = false;
   let nativeFullscreen = false;
   let staleMessageUntil = 0;
+  const screenOrientation = (() => {
+    try { return typeof screen !== 'undefined' && screen && screen.orientation ? screen.orientation : null; }
+    catch (_) { return null; }
+  })();
+
+  function lockOrientation(mode) {
+    if (!screenOrientation || typeof screenOrientation.lock !== 'function') return Promise.resolve(false);
+    try { return Promise.resolve(screenOrientation.lock(mode)).then(() => true, () => false); }
+    catch (_) { return Promise.resolve(false); }
+  }
+
+  function restorePortraitOrientation() {
+    if (screenOrientation && typeof screenOrientation.unlock === 'function') {
+      try { screenOrientation.unlock(); } catch (_) {}
+    }
+    lockOrientation('portrait');
+  }
 
   function setImmersive(active) {
     nav.hidden = active;
@@ -46,14 +63,19 @@ function installPlayerFullscreenBridge() {
       if (data.active && Date.now() < staleMessageUntil) return;
       frameImmersive = data.active;
       syncImmersive();
+      if (data.active) lockOrientation('landscape');
+      else restorePortraitOrientation();
     }
   });
 
   document.addEventListener('fullscreenchange', () => {
     nativeFullscreen = document.fullscreenElement === frame;
-    if (!nativeFullscreen) {
+    if (nativeFullscreen) {
+      lockOrientation('landscape');
+    } else {
       frameImmersive = false;
       staleMessageUntil = Date.now() + 1200;
+      restorePortraitOrientation();
     }
     syncImmersive();
   });
