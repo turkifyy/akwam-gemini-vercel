@@ -254,7 +254,7 @@ export const bootstrapScript = String.raw`(() => {
       '.akwam-immersive-player button[data-plyr="fullscreen"] .icon--pressed,.akwam-immersive-player button[data-plyr="fullscreen"] .label--pressed{display:block!important}' +
       '.akwam-ad-supported:not(.akwam-immersive-player){position:relative!important}' +
       '.akwam-ad-break{position:absolute!important;inset:0!important;z-index:2147483646!important;display:grid!important;place-items:center!important;overflow:hidden!important;background:radial-gradient(circle at 50% 35%,#1b2740,#07090f 68%)!important}' +
-      '.akwam-immersive-player>.akwam-ad-break{position:absolute!important;inset:0!important;z-index:2147483647!important}' +
+      '.akwam-ad-break-immersive{position:fixed!important;inset:0!important;z-index:2147483647!important}' +
       '.akwam-ad-frame-shell{position:absolute!important;inset:10px 10px 72px!important;overflow:hidden!important;border:1px solid #ffffff30!important;border-radius:12px!important;background:#fff!important;box-shadow:0 18px 64px #000b!important}' +
       '.akwam-ad-frame{display:block!important;width:100%!important;height:100%!important;border:0!important;background:#fff!important}' +
       '.akwam-ad-fallback{position:absolute!important;left:12px!important;right:12px!important;bottom:12px!important;z-index:3!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;min-height:48px!important;padding:6px 8px 6px 14px!important;border:1px solid #ffffff2a!important;border-radius:10px!important;background:#0b0f15ed!important;color:#eef1f6!important;box-shadow:0 8px 28px #0009!important;font:500 13px/1.4 system-ui,sans-serif!important;direction:rtl!important;backdrop-filter:blur(10px)!important}' +
@@ -485,7 +485,12 @@ export const bootstrapScript = String.raw`(() => {
         if (shouldResume) video.pause();
         secondsRemaining = adBreakDurationSeconds;
         updateCountdown();
-        player.appendChild(overlay);
+        if (player.classList.contains('akwam-immersive-player')) {
+          overlay.className = 'akwam-ad-break akwam-ad-break-immersive';
+          (document.body || document.documentElement).appendChild(overlay);
+        } else {
+          player.appendChild(overlay);
+        }
         adFrame.src = adBridgeUrl || adLinkUrl;
       }
 

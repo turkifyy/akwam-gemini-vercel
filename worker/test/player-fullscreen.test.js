@@ -60,6 +60,10 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
     appendChild(element) { this.children.push(element); element.parentElement = this; return element; },
     querySelector(selector) { return selector === 'button[data-plyr="fullscreen"]' ? button : null; }
   };
+  const body = {
+    children:[],
+    appendChild(element) { this.children.push(element); element.parentElement = this; return element; }
+  };
   const videoListeners = new Map();
   const video = {
     nodeType:1,
@@ -98,6 +102,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
   const document = {
     readyState:'complete',
     documentElement:root,
+    body,
     head:{appendChild(element) { mobileSearchStyles.push(element); }},
     createElement(tagName) {
       const element = {
@@ -174,7 +179,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
 
   vm.runInNewContext(bootstrapScript, context);
   for (const callback of videoListeners.get('seeked') || []) callback();
-  return {player,button,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners,navigation,window};
+  return {player,body,button,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners,navigation,window};
 }
 
 function clickFullscreen(page) {
@@ -188,6 +193,10 @@ function clickFullscreen(page) {
 
 function dispatchVideoEvent(page, name) {
   for (const callback of page.videoListeners.get(name) || []) callback();
+}
+
+function getAdBreak(page) {
+  return [...page.body.children,...page.player.children].find(element => element.className.includes('akwam-ad-break'));
 }
 
 test("mobile search is reachable and focuses the existing search form", () => {
@@ -274,10 +283,10 @@ test('fullscreen ad pauses at the exact position and resumes after fifteen secon
   for (let second = 0; second < 10; second++) {
     page.video.currentTime += 1;
     dispatchVideoEvent(page,'timeupdate');
-    if (!page.player.children.some(element => element.className === 'akwam-ad-break')) tick();
+    if (!getAdBreak(page)) tick();
   }
 
-  const overlay = page.player.children.find(element => element.className === 'akwam-ad-break');
+  const overlay = getAdBreak(page);
   assert.ok(overlay);
   const [frameShell,fallback,countdown] = overlay.children;
   const [adFrame] = frameShell.children;
@@ -299,14 +308,17 @@ test('fullscreen ad pauses at the exact position and resumes after fifteen secon
   assert.equal(page.video.paused, true);
   assert.equal(page.video.pauseCalls, 1);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
-  assert.match(page.mobileSearchStyles.map(style => style.textContent).join('\n'), /\.akwam-immersive-player>\.akwam-ad-break\{position:absolute!important;inset:0!important;z-index:2147483647!important\}/);
+  assert.equal(page.body.children.includes(overlay), true);
+  assert.equal(page.player.children.includes(overlay), false);
+  assert.equal(overlay.className, 'akwam-ad-break akwam-ad-break-immersive');
+  assert.match(page.mobileSearchStyles.map(style => style.textContent).join('\n'), /\.akwam-ad-break-immersive\{position:fixed!important;inset:0!important;z-index:2147483647!important\}/);
 
   for (let second = 0; second < 14; second++) tick();
-  assert.ok(page.player.children.includes(overlay));
+  assert.ok(page.body.children.includes(overlay));
   assert.match(countdown.textContent, /1 ثوانٍ$/);
   tick();
 
-  assert.equal(page.player.children.includes(overlay), false);
+  assert.equal(page.body.children.includes(overlay), false);
   assert.equal(adFrame.src, 'about:blank');
   assert.equal(adLink.attributes.href, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
   assert.equal(page.video.currentTime, 600.375);
@@ -329,10 +341,10 @@ test('playing from minute nine triggers the minute-ten ad before episode advance
   for (let second = 0; second < 60; second++) {
     page.video.currentTime += 1;
     dispatchVideoEvent(page,'timeupdate');
-    if (!page.player.children.some(element => element.className === 'akwam-ad-break')) tick();
+    if (!getAdBreak(page)) tick();
   }
 
-  assert.ok(page.player.children.some(element => element.className === 'akwam-ad-break'));
+  assert.ok(getAdBreak(page));
   assert.equal(page.navigation.length, 0);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
   assert.equal(page.video.currentTime, 600);
@@ -350,7 +362,7 @@ test('an episode ending at the ad mark waits for the ad before advancing', () =>
   page.video.ended = true;
   dispatchVideoEvent(page,'ended');
 
-  assert.ok(page.player.children.some(element => element.className === 'akwam-ad-break'));
+  assert.ok(getAdBreak(page));
   assert.equal(page.navigation.length, 0);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
 
@@ -358,7 +370,7 @@ test('an episode ending at the ad mark waits for the ad before advancing', () =>
   assert.equal(page.navigation.length, 0);
   tick();
 
-  assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), false);
+  assert.equal(getAdBreak(page), undefined);
   assert.deepEqual(page.navigation, ['https://worker.example/site/en/watch/181288/102322/show/episode-2']);
 });
 
@@ -367,7 +379,7 @@ test('paused time does not count toward the next ad break', () => {
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
   page.video.paused = true;
   for (let second = 0; second < 1200; second++) tick();
-  assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), false);
+  assert.equal(getAdBreak(page), undefined);
 
   page.video.currentTime = 599;
   page.video.seeking = true;
@@ -377,7 +389,7 @@ test('paused time does not count toward the next ad break', () => {
   page.video.paused = false;
   page.video.currentTime += 1;
   dispatchVideoEvent(page,'timeupdate');
-  assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), true);
+  assert.ok(getAdBreak(page));
 });
 
 test('a manual seek past the ad mark does not trigger immediately', () => {
@@ -389,11 +401,25 @@ test('a manual seek past the ad mark does not trigger immediately', () => {
   page.video.seeking = false;
   dispatchVideoEvent(page,'seeked');
   tick();
-  assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), false);
+  assert.equal(getAdBreak(page), undefined);
 
   page.video.currentTime += 600;
   dispatchVideoEvent(page,'timeupdate');
-  assert.equal(page.player.children.some(element => element.className === 'akwam-ad-break'), true);
+  assert.ok(getAdBreak(page));
+});
+
+test('non-immersive ads remain constrained to the video player', () => {
+  const page = runWatchPage(1);
+  clickFullscreen(page);
+  page.video.currentTime = 599;
+  page.video.currentTime += 1;
+  dispatchVideoEvent(page,'timeupdate');
+
+  const overlay = getAdBreak(page);
+  assert.ok(overlay);
+  assert.equal(page.player.children.includes(overlay), true);
+  assert.equal(page.body.children.includes(overlay), false);
+  assert.equal(overlay.className, 'akwam-ad-break');
 });
 
 test('manual toggle can re-enable immersive mode', () => {
