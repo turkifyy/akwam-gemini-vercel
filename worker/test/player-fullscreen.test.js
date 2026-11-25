@@ -40,11 +40,14 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
   const timers = [];
   const orientationListeners = new Map();
   const orientation = options.orientation ? {
+    type:'portrait-primary',
     lockCalls:[],
     unlockCalls:0,
     lock(mode) {
       this.lockCalls.push(mode);
-      return options.orientation.lockFails ? Promise.reject(new Error('Lock unavailable')) : Promise.resolve();
+      if (options.orientation.lockFails) return Promise.reject(new Error('Lock unavailable'));
+      this.type = mode + '-primary';
+      return Promise.resolve();
     },
     unlock() { this.unlockCalls += 1; },
     addEventListener(name, callback) {
@@ -52,8 +55,12 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
       callbacks.push(callback);
       orientationListeners.set(name, callbacks);
     },
+    removeEventListener(name, callback) {
+      const callbacks = orientationListeners.get(name) || [];
+      orientationListeners.set(name, callbacks.filter(item => item !== callback));
+    },
     dispatchChange() {
-      for (const callback of orientationListeners.get('change') || []) callback();
+      for (const callback of [...(orientationListeners.get('change') || [])]) callback();
     }
   } : null;
   const mobileSearchStyles = [];
@@ -720,15 +727,16 @@ test('leaving fullscreen rotates to portrait before the browser chrome returns',
   await new Promise(resolve => setImmediate(resolve));
 
   assert.deepEqual(page.orientation.lockCalls, ['portrait']);
+  assert.equal(page.orientation.type, 'portrait-primary');
   assert.equal(page.document.fullscreenElement, page.player);
-  assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
 
   page.orientation.dispatchChange();
 
   assert.equal(page.document.fullscreenElement, null);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
   assert.equal(page.document.documentElement.classList.contains('akwam-immersive-page'), false);
   assert.equal(page.orientation.lockCalls.includes('portrait'), true);
-  assert.equal(page.orientation.unlockCalls > 0, true);
 });
 
 test('a browser-forced fullscreen exit restores portrait orientation', () => {
@@ -785,6 +793,12 @@ test('parent bridge locks landscape in fullscreen and restores portrait on exit'
   };
 
   vm.runInNewContext(configSource, {window,document,location:{href:'https://parent.example/'},URL,screen});
+  const receiveMessage = windowListeners.get('message');
+  const send = data => receiveMessage({
+    origin:'https://turkifyseries.osamalovirboy.workers.dev',
+    source:frame.contentWindow,
+    data
+  });
   const nativeFullscreen = active => {
     fullscreenElement = active ? frame : null;
     documentListeners.get('fullscreenchange')();
@@ -797,8 +811,11 @@ test('parent bridge locks landscape in fullscreen and restores portrait on exit'
   lockCalls.length = 0;
   nativeFullscreen(false);
   assert.equal(lockCalls.includes('portrait'), true);
-  assert.equal(unlockCalls > 0, true);
   assert.equal(nav.hidden, false);
+
+  lockCalls.length = 0;
+  send({source:'akwam-gemini-bridge',type:'player-orientation',mode:'portrait'});
+  assert.equal(lockCalls.at(-1), 'portrait');
 });
 
 test('exit still completes when the orientation lock is refused', async () => {

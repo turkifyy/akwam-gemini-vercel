@@ -24,9 +24,6 @@ function installPlayerFullscreenBridge() {
   }
 
   function restorePortraitOrientation() {
-    if (screenOrientation && typeof screenOrientation.unlock === 'function') {
-      try { screenOrientation.unlock(); } catch (_) {}
-    }
     lockOrientation('portrait');
   }
 
@@ -66,6 +63,7 @@ function installPlayerFullscreenBridge() {
       if (data.active) lockOrientation('landscape');
       else restorePortraitOrientation();
     }
+    if (data.type === 'player-orientation' && data.mode === 'portrait') restorePortraitOrientation();
   });
 
   document.addEventListener('fullscreenchange', () => {

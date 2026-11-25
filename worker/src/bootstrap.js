@@ -230,9 +230,6 @@ export const bootstrapScript = String.raw`(() => {
     }
 
     function restorePlatformPortrait() {
-      if (screenOrientation && typeof screenOrientation.unlock === 'function') {
-        try { screenOrientation.unlock(); } catch (_) {}
-      }
       const applyPortrait = () => lockOrientation('portrait');
       applyPortrait();
       if (typeof setTimeout === 'function') setTimeout(applyPortrait, 180);
@@ -392,13 +389,22 @@ export const bootstrapScript = String.raw`(() => {
 
     function exitPlayerFullscreen(player) {
       manualFullscreenExit = true;
-      setImmersive(player,false,true);
+      // Ask the parent frame to rotate too; it is the top-level document and can hold
+      // the orientation lock even when the player lives inside the iframe.
+      post('player-orientation', {mode:'portrait'});
       let settled = false;
       const finish = () => {
         if (settled) return;
         settled = true;
+        try { screenOrientation?.removeEventListener?.('change', onOrientationChange); } catch (_) {}
         if (document.fullscreenElement === player) exitNativeFullscreen();
+        else setImmersive(player,false,true);
         restorePlatformPortrait();
+      };
+      const onOrientationChange = () => {
+        // Ignore transient sensor changes; only leave fullscreen once the device is
+        // actually upright, otherwise the platform could reappear in landscape.
+        if (/^portrait/.test(String(screenOrientation?.type || ''))) finish();
       };
       if (!screenOrientation || typeof screenOrientation.lock !== 'function' || typeof setTimeout !== 'function') {
         finish();
@@ -411,11 +417,11 @@ export const bootstrapScript = String.raw`(() => {
         if (!locked) {
           // The parent page shares the same screen and may still hold the lock right,
           // so give it a moment to rotate before the player leaves fullscreen.
-          setTimeout(finish, 260);
+          setTimeout(finish, 420);
           return;
         }
-        try { screenOrientation.addEventListener?.('change', finish, {once:true}); } catch (_) {}
-        setTimeout(finish, 320);
+        try { screenOrientation.addEventListener?.('change', onOrientationChange); } catch (_) {}
+        setTimeout(finish, 450);
       });
       setTimeout(finish, 650);
     }
