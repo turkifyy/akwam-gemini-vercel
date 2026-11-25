@@ -198,7 +198,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
 
   vm.runInNewContext(bootstrapScript, context);
   for (const callback of videoListeners.get('seeked') || []) callback();
-  return {player,body,button,document,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners,navigation,window};
+  return {player,body,button,document,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners,navigation,window,setFullscreenElement(value) { fullscreenElement = value; dispatchDocumentEvent('fullscreenchange'); }};
 }
 
 function clickFullscreen(page) {
@@ -512,6 +512,27 @@ test('fullscreen button requests native browser fullscreen and Escape exits it',
   });
   assert.equal(page.document.fullscreenElement, null);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
+});
+
+test('unexpected native fullscreen exit keeps the immersive layout until manual exit', () => {
+  const page = runWatchPage(1, undefined, {nativeFullscreen:true});
+  clickFullscreen(page);
+
+  page.video.currentTime = 585;
+  page.video.seeking = true;
+  dispatchVideoEvent(page,'seeking');
+  page.video.seeking = false;
+  dispatchVideoEvent(page,'seeked');
+  page.setFullscreenElement(null);
+
+  assert.equal(page.document.fullscreenElement, null);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+  assert.equal(page.sessionStorage.getItem('akwam-immersive-dismissed-v2:102321'), null);
+  assert.equal(page.messages.at(-1).message.active, true);
+
+  clickFullscreen(page);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
+  assert.equal(page.sessionStorage.getItem('akwam-immersive-dismissed-v2:102321'), '1');
 });
 
 test('rejected native fullscreen keeps the CSS fallback and allows manual exit', async () => {

@@ -194,6 +194,7 @@ export const bootstrapScript = String.raw`(() => {
     const lastPlaybackPositions = new WeakMap();
     const nativeFullscreenUnavailable = new WeakSet();
     let nativeFullscreenPlayer = null;
+    let nativeFullscreenExitRequested = null;
     const adBreakIntervalSeconds = 10 * 60;
     const adBreakDurationSeconds = 15;
     document.addEventListener('click', event => {
@@ -317,12 +318,23 @@ export const bootstrapScript = String.raw`(() => {
       }
     }
 
+    function exitNativeFullscreen(player) {
+      nativeFullscreenExitRequested = player;
+      try {
+        const exit = document.exitFullscreen();
+        if (exit && typeof exit.catch === 'function') {
+          exit.catch(() => {
+            if (nativeFullscreenExitRequested === player) nativeFullscreenExitRequested = null;
+          });
+        }
+      } catch (_) {
+        if (nativeFullscreenExitRequested === player) nativeFullscreenExitRequested = null;
+      }
+    }
+
     function togglePlayerFullscreen(player) {
       if (document.fullscreenElement === player) {
-        try {
-          const exit = document.exitFullscreen();
-          if (exit && typeof exit.catch === 'function') exit.catch(() => {});
-        } catch (_) {}
+        exitNativeFullscreen(player);
         return;
       }
       if (nativeFullscreenPlayer === player) return;
@@ -358,8 +370,14 @@ export const bootstrapScript = String.raw`(() => {
       if (!nativeFullscreenPlayer || document.fullscreenElement === nativeFullscreenPlayer) return;
       const player = nativeFullscreenPlayer;
       nativeFullscreenPlayer = null;
-      nativeFullscreenUnavailable.delete(player);
-      setImmersive(player,false,true);
+      if (nativeFullscreenExitRequested === player) {
+        nativeFullscreenExitRequested = null;
+        nativeFullscreenUnavailable.delete(player);
+        setImmersive(player,false,true);
+      } else {
+        nativeFullscreenUnavailable.add(player);
+        setImmersive(player,true);
+      }
     }, true);
 
     function currentEpisodeNumber() {
@@ -396,11 +414,9 @@ export const bootstrapScript = String.raw`(() => {
       event.preventDefault();
       event.stopImmediatePropagation();
       if (document.fullscreenElement === player) {
-        try {
-          const exit = document.exitFullscreen();
-          if (exit && typeof exit.catch === 'function') exit.catch(() => {});
-        } catch (_) {}
+        exitNativeFullscreen(player);
       } else {
+        nativeFullscreenUnavailable.delete(player);
         setImmersive(player, false, true);
       }
     }, true);
