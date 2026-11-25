@@ -43,7 +43,8 @@ function runBootstrap(pathname, videos = []) {
   const window = {
     __AKWAM_BRIDGE__:{lang:"en",upstreamHost:"akwam.ss"},
     fetch:() => Promise.resolve(),
-    parent:{postMessage() {}}
+    parent:{postMessage() {}},
+    addEventListener() {}
   };
   const context = {
     window,

@@ -29,6 +29,7 @@ function createClassList() {
 
 function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
   const messages = [];
+  const clock = options.clock || {now:1700000000000};
   const listeners = new Map();
   let fullscreenElement = null;
   const dispatchDocumentEvent = name => {
@@ -185,20 +186,22 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
     fetch:() => Promise.resolve(),
     openCalls:[],
     open(...args) { this.openCalls.push(args); return {}; },
-    parent:{postMessage(message, target) { messages.push({message,target}); }}
+    parent:{postMessage(message, target) { messages.push({message,target}); }},
+    addEventListener() {}
   };
   class MutationObserver { observe() {} }
   class XMLHttpRequest { open() {} }
   const context = {
     window,document,location,sessionStorage,localStorage:createStorage(),
     XMLHttpRequest,history:{pushState() {},replaceState() {}},MutationObserver,
-    URL,Request,console,
+    URL,Request,console,clock,
+    Date:class extends Date { static now() { return clock.now; } },
     setInterval(callback,delay) { const timer = {callback,delay}; intervals.push(timer); return timer; }
   };
 
   vm.runInNewContext(bootstrapScript, context);
   for (const callback of videoListeners.get('seeked') || []) callback();
-  return {player,body,button,document,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners,navigation,window,setFullscreenElement(value) { fullscreenElement = value; dispatchDocumentEvent('fullscreenchange'); }};
+  return {player,body,button,document,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,video,videoListeners,navigation,window,clock,setFullscreenElement(value) { fullscreenElement = value; dispatchDocumentEvent('fullscreenchange'); }};
 }
 
 function clickFullscreen(page) {
@@ -416,6 +419,7 @@ test('natural playback crossing the episode-end threshold advances', () => {
   dispatchVideoEvent(page,'timeupdate');
   assert.deepEqual(page.navigation, []);
 
+  page.clock.now += 2000;
   page.video.currentTime = 1930;
   dispatchVideoEvent(page,'timeupdate');
   assert.deepEqual(page.navigation, [nextEpisodeUrl]);
@@ -514,9 +518,10 @@ test('fullscreen button requests native browser fullscreen and Escape exits it',
   assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
 });
 
-test('unexpected native fullscreen exit keeps the immersive layout until manual exit', () => {
+test('unexpected native fullscreen exit restores the page chrome', () => {
   const page = runWatchPage(1, undefined, {nativeFullscreen:true});
   clickFullscreen(page);
+  assert.equal(page.document.fullscreenElement, page.player);
 
   page.video.currentTime = 585;
   page.video.seeking = true;
@@ -526,13 +531,42 @@ test('unexpected native fullscreen exit keeps the immersive layout until manual 
   page.setFullscreenElement(null);
 
   assert.equal(page.document.fullscreenElement, null);
-  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
-  assert.equal(page.sessionStorage.getItem('akwam-immersive-dismissed-v2:102321'), null);
-  assert.equal(page.messages.at(-1).message.active, true);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
+  assert.equal(page.document.documentElement.classList.contains('akwam-immersive-page'), false);
+  assert.equal(page.messages.at(-1).message.type, 'player-immersive');
+  assert.equal(page.messages.at(-1).message.active, false);
 
   clickFullscreen(page);
-  assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
-  assert.equal(page.sessionStorage.getItem('akwam-immersive-dismissed-v2:102321'), '1');
+  assert.equal(page.document.fullscreenElement, page.player);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+});
+
+test('a seek that races a timeupdate cannot skip to the next episode', () => {
+  const nextEpisodeUrl = 'https://worker.example/site/en/watch/181288/102322/show/episode-2';
+  const page = runWatchPage(1, undefined, {duration:655,nextEpisodeUrl});
+  page.video.paused = false;
+  page.video.currentTime = 87;
+  dispatchVideoEvent(page,'timeupdate');
+  page.video.currentTime = 585;
+  dispatchVideoEvent(page,'timeupdate');
+  assert.deepEqual(page.navigation, []);
+
+  page.clock.now += 2000;
+  page.video.currentTime = 585.4;
+  dispatchVideoEvent(page,'timeupdate');
+  assert.deepEqual(page.navigation, []);
+});
+
+test('seeking a paused video does not start playback', () => {
+  const page = runWatchPage(1, undefined, {duration:655});
+  page.video.paused = true;
+  page.video.currentTime = 585;
+  page.video.seeking = true;
+  dispatchVideoEvent(page,'seeking');
+  page.video.seeking = false;
+  dispatchVideoEvent(page,'seeked');
+  assert.equal(page.video.playCalls, 0);
+  assert.equal(page.video.paused, true);
 });
 
 test('rejected native fullscreen keeps the CSS fallback and allows manual exit', async () => {
@@ -551,14 +585,20 @@ test('parent bridge expands the iframe and restores navigation on exit', async (
   const configSource = await readFile(new URL('../../site/config.js', import.meta.url), 'utf8');
   const documentListeners = new Map();
   const windowListeners = new Map();
+  const frameLoadListeners = new Map();
   const frameStyle = {
     top:'',height:'',zIndex:'',
     removeProperty(name) { this[name === 'z-index' ? 'zIndex' : name] = ''; }
   };
-  const frame = {contentWindow:{},style:frameStyle};
+  const frame = {
+    contentWindow:{},style:frameStyle,
+    addEventListener(name, callback) { frameLoadListeners.set(name, callback); }
+  };
   const nav = {hidden:false,style:{display:''}};
+  let fullscreenElement = null;
   const document = {
     readyState:'loading',
+    get fullscreenElement() { return fullscreenElement; },
     querySelector(selector) { return selector === '#site-frame' ? frame : nav; },
     addEventListener(name, callback) { documentListeners.set(name, callback); }
   };
@@ -571,6 +611,10 @@ test('parent bridge expands the iframe and restores navigation on exit', async (
   documentListeners.get('DOMContentLoaded')();
   const receiveMessage = windowListeners.get('message');
   const send = data => receiveMessage({origin:'https://turkifyseries.osamalovirboy.workers.dev',source:frame.contentWindow,data});
+  const nativeFullscreen = active => {
+    fullscreenElement = active ? frame : null;
+    documentListeners.get('fullscreenchange')();
+  };
 
   send({source:'akwam-gemini-bridge',type:'player-immersive',active:true});
   assert.equal(nav.hidden, true);
@@ -583,4 +627,55 @@ test('parent bridge expands the iframe and restores navigation on exit', async (
   assert.equal(frame.style.top, '');
   assert.equal(frame.style.height, '');
   assert.equal(frame.style.zIndex, '');
+
+  nativeFullscreen(true);
+  assert.equal(nav.hidden, true);
+  assert.equal(frame.style.height, '100dvh');
+
+  nativeFullscreen(false);
+  assert.equal(nav.hidden, false);
+  assert.equal(frame.style.top, '');
+  assert.equal(frame.style.height, '');
+  assert.equal(frame.style.zIndex, '');
+
+  nativeFullscreen(true);
+  nativeFullscreen(false);
+  send({source:'akwam-gemini-bridge',type:'player-immersive',active:true});
+  assert.equal(nav.hidden, false);
+
+  frameLoadListeners.get('load')();
+  assert.equal(nav.hidden, false);
+});
+
+test('parent bridge releases immersion when the iframe navigates to a browse page', async () => {
+  const configSource = await readFile(new URL('../../site/config.js', import.meta.url), 'utf8');
+  const documentListeners = new Map();
+  const windowListeners = new Map();
+  const frame = {
+    contentWindow:{},
+    style:{top:'',height:'',zIndex:'',removeProperty(name) { this[name === 'z-index' ? 'zIndex' : name] = ''; }},
+    addEventListener() {}
+  };
+  const nav = {hidden:false,style:{display:''}};
+  const document = {
+    readyState:'complete',
+    fullscreenElement:null,
+    querySelector(selector) { return selector === '#site-frame' ? frame : nav; },
+    addEventListener(name, callback) { documentListeners.set(name, callback); }
+  };
+  const window = {
+    AKWAM_WORKER_URL:'https://turkifyseries.osamalovirboy.workers.dev',
+    addEventListener(name, callback) { windowListeners.set(name, callback); }
+  };
+
+  vm.runInNewContext(configSource, {window,document,location:{href:'https://parent.example/'},URL});
+  const receiveMessage = windowListeners.get('message');
+  const send = data => receiveMessage({origin:'https://turkifyseries.osamalovirboy.workers.dev',source:frame.contentWindow,data});
+
+  send({source:'akwam-gemini-bridge',type:'player-immersive',active:true});
+  assert.equal(nav.hidden, true);
+
+  send({source:'akwam-gemini-bridge',type:'player-page',watch:false});
+  assert.equal(nav.hidden, false);
+  assert.equal(frame.style.height, '');
 });

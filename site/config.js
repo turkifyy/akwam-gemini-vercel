@@ -9,6 +9,10 @@ function installPlayerFullscreenBridge() {
   try { workerOrigin = new URL(window.AKWAM_WORKER_URL, location.href).origin; }
   catch (_) { return; }
 
+  let frameImmersive = false;
+  let nativeFullscreen = false;
+  let staleMessageUntil = 0;
+
   function setImmersive(active) {
     nav.hidden = active;
     nav.style.display = active ? 'none' : '';
@@ -23,13 +27,39 @@ function installPlayerFullscreenBridge() {
     }
   }
 
+  function syncImmersive() {
+    setImmersive(frameImmersive || nativeFullscreen);
+  }
+
+  function releaseImmersive() {
+    frameImmersive = false;
+    nativeFullscreen = false;
+    setImmersive(false);
+  }
+
   window.addEventListener('message', event => {
     if (event.origin !== workerOrigin || event.source !== frame.contentWindow) return;
     const data = event.data;
     if (data?.source !== 'akwam-gemini-bridge') return;
-    if (data.type === 'player-page' && data.watch === false) setImmersive(false);
-    if (data.type === 'player-immersive' && typeof data.active === 'boolean') setImmersive(data.active);
+    if (data.type === 'player-page' && data.watch === false) releaseImmersive();
+    if (data.type === 'player-immersive' && typeof data.active === 'boolean') {
+      if (data.active && Date.now() < staleMessageUntil) return;
+      frameImmersive = data.active;
+      syncImmersive();
+    }
   });
+
+  document.addEventListener('fullscreenchange', () => {
+    nativeFullscreen = document.fullscreenElement === frame;
+    if (!nativeFullscreen) {
+      frameImmersive = false;
+      staleMessageUntil = Date.now() + 1200;
+    }
+    syncImmersive();
+  });
+
+  frame.addEventListener('load', releaseImmersive);
+  window.addEventListener('pagehide', releaseImmersive);
 }
 
 if (document.readyState === 'loading') {

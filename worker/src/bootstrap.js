@@ -181,6 +181,7 @@ export const bootstrapScript = String.raw`(() => {
 
   const watchPage = /\/watch\/\d+\/\d+(?:\/|$)/.test(location.pathname);
   post('player-page', {watch:watchPage});
+  if (watchPage) window.addEventListener('pagehide', () => post('player-immersive', {active:false}));
 
   if (watchPage) {
     const attachedVideos = new WeakSet();
@@ -192,9 +193,10 @@ export const bootstrapScript = String.raw`(() => {
     const introSkipAttempted = new WeakSet();
     const advancedVideos = new WeakSet();
     const lastPlaybackPositions = new WeakMap();
+    const seekGraceUntil = new WeakMap();
+    const seekGraceMs = 1500;
     const nativeFullscreenUnavailable = new WeakSet();
     let nativeFullscreenPlayer = null;
-    let nativeFullscreenExitRequested = null;
     const adBreakIntervalSeconds = 10 * 60;
     const adBreakDurationSeconds = 15;
     document.addEventListener('click', event => {
@@ -228,6 +230,14 @@ export const bootstrapScript = String.raw`(() => {
       return nextEpisodeUrl;
     }
 
+    function markSeekGrace(video) {
+      seekGraceUntil.set(video, Date.now() + seekGraceMs);
+    }
+
+    function seekGraceActive(video) {
+      return (seekGraceUntil.get(video) || 0) > Date.now();
+    }
+
     function advanceEpisode(video, ended=false) {
       if (advancedVideos.has(video)) return;
       const adBreak = adBreakStates.get(video);
@@ -236,10 +246,11 @@ export const bootstrapScript = String.raw`(() => {
         if (adBreak.isActive()) return;
       }
       const currentPosition = Number(video.currentTime);
-      const previousPosition = lastPlaybackPositions.get(video);
       if (!Number.isFinite(currentPosition)) return;
+      const previousPosition = lastPlaybackPositions.get(video);
       lastPlaybackPositions.set(video,currentPosition);
       if (!ended) {
+        if (video.seeking || seekGraceActive(video)) return;
         const threshold = video.duration - 70;
         const crossedThresholdDuringPlayback = Number.isFinite(video.duration) && video.duration > 70 &&
           Number.isFinite(previousPosition) && previousPosition < threshold && currentPosition >= threshold &&
@@ -318,23 +329,16 @@ export const bootstrapScript = String.raw`(() => {
       }
     }
 
-    function exitNativeFullscreen(player) {
-      nativeFullscreenExitRequested = player;
+    function exitNativeFullscreen() {
       try {
         const exit = document.exitFullscreen();
-        if (exit && typeof exit.catch === 'function') {
-          exit.catch(() => {
-            if (nativeFullscreenExitRequested === player) nativeFullscreenExitRequested = null;
-          });
-        }
-      } catch (_) {
-        if (nativeFullscreenExitRequested === player) nativeFullscreenExitRequested = null;
-      }
+        if (exit && typeof exit.catch === 'function') exit.catch(() => {});
+      } catch (_) {}
     }
 
     function togglePlayerFullscreen(player) {
       if (document.fullscreenElement === player) {
-        exitNativeFullscreen(player);
+        exitNativeFullscreen();
         return;
       }
       if (nativeFullscreenPlayer === player) return;
@@ -370,14 +374,8 @@ export const bootstrapScript = String.raw`(() => {
       if (!nativeFullscreenPlayer || document.fullscreenElement === nativeFullscreenPlayer) return;
       const player = nativeFullscreenPlayer;
       nativeFullscreenPlayer = null;
-      if (nativeFullscreenExitRequested === player) {
-        nativeFullscreenExitRequested = null;
-        nativeFullscreenUnavailable.delete(player);
-        setImmersive(player,false,true);
-      } else {
-        nativeFullscreenUnavailable.add(player);
-        setImmersive(player,true);
-      }
+      nativeFullscreenUnavailable.delete(player);
+      setImmersive(player,false,true);
     }, true);
 
     function currentEpisodeNumber() {
@@ -414,7 +412,7 @@ export const bootstrapScript = String.raw`(() => {
       event.preventDefault();
       event.stopImmediatePropagation();
       if (document.fullscreenElement === player) {
-        exitNativeFullscreen(player);
+        exitNativeFullscreen();
       } else {
         nativeFullscreenUnavailable.delete(player);
         setImmersive(player, false, true);
@@ -422,7 +420,7 @@ export const bootstrapScript = String.raw`(() => {
     }, true);
 
     function skipEpisodeIntro(video) {
-      if (video.readyState < 2 || video.seeking || introSkipPending.has(video) || introSkipAttempted.has(video)) return;
+      if (video.readyState < 2 || video.seeking || seekGraceActive(video) || introSkipPending.has(video) || introSkipAttempted.has(video)) return;
       const duration = video.duration;
       if (Number.isFinite(duration) && duration > 85 && video.currentTime < 85) {
         introSkipPending.add(video);
@@ -875,6 +873,8 @@ export const bootstrapScript = String.raw`(() => {
       });
       seek.addEventListener('input',() => {
         if (Number.isFinite(video.duration) && video.duration > 0) {
+          markSeekGrace(video);
+          lastPlaybackPositions.set(video,video.duration * Number(seek.value) / 1000);
           video.currentTime = video.duration * Number(seek.value) / 1000;
           updateProgress();
         }
@@ -934,13 +934,13 @@ export const bootstrapScript = String.raw`(() => {
       attachedVideos.add(video);
       lastPlaybackPositions.set(video,Number(video.currentTime));
       video.addEventListener("seeking", () => {
+        markSeekGrace(video);
         lastPlaybackPositions.set(video,Number(video.currentTime));
       });
       video.addEventListener("seeked", () => {
+        markSeekGrace(video);
         lastPlaybackPositions.set(video,Number(video.currentTime));
         introSkipPending.delete(video);
-        skipEpisodeIntro(video);
-        autoplayEpisode(video);
       });
       for (const eventName of ["durationchange","play","playing"]) {
         video.addEventListener(eventName, () => skipEpisodeIntro(video));
