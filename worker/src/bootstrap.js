@@ -266,6 +266,8 @@ export const bootstrapScript = String.raw`(() => {
     let nativeFullscreenPlayer = null;
     const adBreakIntervalSeconds = 10 * 60;
     const adBreakDurationSeconds = 45;
+    const openingAdDelaySeconds = 85;
+    const openingAdDurationSeconds = 5;
     document.addEventListener('click', event => {
       const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
       const link = target?.closest?.('a[target="_blank"]');
@@ -554,6 +556,7 @@ export const bootstrapScript = String.raw`(() => {
       try {
         video.currentTime = target;
         lastPlaybackPositions.set(video,target);
+        adBreakStates.get(video)?.resetPlaybackPosition();
         if (activeWatchProgress) activeWatchProgress.currentTime = target;
       } catch (_) {
         startPositionApplied.delete(video);
@@ -594,6 +597,8 @@ export const bootstrapScript = String.raw`(() => {
       let playbackPosition = Number.isFinite(video.currentTime) ? video.currentTime : 0;
       let shouldResume = false;
       let adActive = false;
+      let openingAdElapsedSeconds = 0;
+      let openingAdShown = false;
 
       function resetPlaybackPosition() {
         if (Number.isFinite(video.currentTime)) playbackPosition = video.currentTime;
@@ -626,12 +631,12 @@ export const bootstrapScript = String.raw`(() => {
         } catch (_) {}
       }
 
-      function openAdBreak() {
+      function openAdBreak(durationSeconds=adBreakDurationSeconds) {
         adActive = true;
         savedPosition = Number.isFinite(video.currentTime) ? video.currentTime : 0;
         shouldResume = video.paused === false && !video.ended;
         if (shouldResume) video.pause();
-        secondsRemaining = adBreakDurationSeconds;
+        secondsRemaining = durationSeconds;
         updateCountdown();
         if (document.fullscreenElement === player) {
           overlay.className = 'akwam-ad-break akwam-ad-break-immersive';
@@ -665,6 +670,14 @@ export const bootstrapScript = String.raw`(() => {
         const elapsedMediaSeconds = currentPosition - playbackPosition;
         playbackPosition = currentPosition;
         if (!Number.isFinite(elapsedMediaSeconds) || elapsedMediaSeconds <= 0) return;
+        if (!openingAdShown) {
+          openingAdElapsedSeconds += elapsedMediaSeconds;
+          if (openingAdElapsedSeconds >= openingAdDelaySeconds) {
+            openingAdShown = true;
+            openAdBreak(openingAdDurationSeconds);
+            return;
+          }
+        }
         if (currentPosition >= nextAdBreakAt) {
           do {
             nextAdBreakAt += adBreakIntervalSeconds;
@@ -676,14 +689,19 @@ export const bootstrapScript = String.raw`(() => {
       function willOccurBeforeEnd() {
         if (adActive || video.paused !== false || video.ended || video.seeking || !Number.isFinite(video.duration)) return false;
         const remainingMediaSeconds = video.duration - Number(video.currentTime);
-        const remainingAdSeconds = nextAdBreakAt - Number(video.currentTime);
         const playbackRate = Number(video.playbackRate) || 1;
-        return remainingMediaSeconds > 0 && remainingAdSeconds > 0 &&
-          remainingAdSeconds <= remainingMediaSeconds / playbackRate;
+        const remainingPlaybackSeconds = remainingMediaSeconds / playbackRate;
+        const remainingOpeningAdSeconds = openingAdShown ? Infinity : openingAdDelaySeconds - openingAdElapsedSeconds;
+        const remainingAdSeconds = nextAdBreakAt - Number(video.currentTime);
+        return remainingMediaSeconds > 0 && (
+          (remainingOpeningAdSeconds > 0 && remainingOpeningAdSeconds <= remainingPlaybackSeconds) ||
+          (remainingAdSeconds > 0 && remainingAdSeconds <= remainingPlaybackSeconds)
+        );
       }
 
       adBreakStates.set(video, {
         updatePlaybackProgress,
+        resetPlaybackPosition,
         isActive:() => adActive,
         willOccurBeforeEnd
       });

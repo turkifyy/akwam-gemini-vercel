@@ -493,6 +493,53 @@ test('only the sponsored fullscreen link can open an external popup', () => {
   assert.equal(page.window.open('https://unapproved.example/','_blank'), null);
 });
 
+test('opening ad runs for five seconds after 85 seconds of active playback', () => {
+  const page = runWatchPage(1);
+  clickCenterPlay(page);
+  const tick = page.intervals.find(timer => timer.delay === 1000).callback;
+  assert.equal(page.video.currentTime, 85);
+
+  for (let second = 0; second < 40; second++) {
+    page.video.currentTime += 1;
+    dispatchVideoEvent(page,'timeupdate');
+  }
+  assert.equal(getAdBreak(page), undefined);
+
+  page.video.pause();
+  page.video.currentTime += 30;
+  dispatchVideoEvent(page,'timeupdate');
+  page.video.seeking = true;
+  dispatchVideoEvent(page,'seeking');
+  page.video.currentTime = 500;
+  page.video.seeking = false;
+  dispatchVideoEvent(page,'seeked');
+  page.video.play();
+
+  for (let second = 0; second < 44; second++) {
+    page.video.currentTime += 1;
+    dispatchVideoEvent(page,'timeupdate');
+  }
+  assert.equal(getAdBreak(page), undefined);
+
+  page.video.currentTime += 1;
+  dispatchVideoEvent(page,'timeupdate');
+  const overlay = getAdBreak(page);
+  assert.ok(overlay);
+  const [frameShell,countdown] = overlay.children;
+  const [adFrame] = frameShell.children;
+  assert.equal(adFrame.src, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
+  assert.match(countdown.textContent, /5 ثوانٍ$/);
+  assert.equal(page.video.paused, true);
+
+  for (let second = 0; second < 4; second++) tick();
+  assert.ok(page.body.children.includes(overlay));
+  assert.match(countdown.textContent, /1 ثوانٍ$/);
+  tick();
+  assert.equal(page.body.children.includes(overlay), false);
+  assert.equal(page.video.currentTime, 545);
+  assert.equal(page.video.paused, false);
+});
+
 test('fullscreen ad pauses at the exact position and resumes after forty-five seconds', () => {
   const page = runWatchPage(1);
   clickCenterPlay(page);
@@ -608,7 +655,7 @@ test('seeking near the episode end does not advance or exit fullscreen', () => {
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
 });
 
-test('natural playback crossing the episode-end threshold advances', () => {
+test('a pending opening ad delays episode advancement until the episode ends', () => {
   const nextEpisodeUrl = 'https://worker.example/site/en/watch/181288/102322/show/episode-2';
   const page = runWatchPage(1, undefined, {duration:2000,nextEpisodeUrl});
   page.video.paused = false;
@@ -624,6 +671,26 @@ test('natural playback crossing the episode-end threshold advances', () => {
   page.clock.now += 2000;
   page.video.currentTime = 1930;
   dispatchVideoEvent(page,'timeupdate');
+  assert.deepEqual(page.navigation, []);
+
+  for (let second = 0; second < 54; second++) {
+    page.video.currentTime += 1;
+    dispatchVideoEvent(page,'timeupdate');
+  }
+  assert.equal(getAdBreak(page), undefined);
+  page.video.currentTime += 1;
+  dispatchVideoEvent(page,'timeupdate');
+  assert.ok(getAdBreak(page));
+  assert.deepEqual(page.navigation, []);
+
+  const tick = page.intervals.find(timer => timer.delay === 1000).callback;
+  for (let second = 0; second < 5; second++) tick();
+  assert.equal(getAdBreak(page), undefined);
+  assert.deepEqual(page.navigation, []);
+
+  page.video.currentTime = 2000;
+  page.video.ended = true;
+  dispatchVideoEvent(page,'ended');
   assert.deepEqual(page.navigation, [nextEpisodeUrl]);
 });
 
