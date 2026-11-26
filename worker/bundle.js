@@ -266,7 +266,6 @@ const bootstrapScript = String.raw`(() => {
     let nativeFullscreenPlayer = null;
     const adBreakIntervalSeconds = 10 * 60;
     const adBreakDurationSeconds = 45;
-    const openingAdDelaySeconds = 85;
     const openingAdDurationSeconds = 5;
     document.addEventListener('click', event => {
       const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
@@ -553,13 +552,13 @@ const bootstrapScript = String.raw`(() => {
       const target = Math.min(requestedTime, Math.max(0,duration - 0.25));
       startPositionApplied.add(video);
       if (Math.abs(Number(video.currentTime) - target) < 1) {
-        adBreakStates.get(video)?.resetPlaybackPosition(true);
+        adBreakStates.get(video)?.resetPlaybackPosition();
         return;
       }
       try {
         video.currentTime = target;
         lastPlaybackPositions.set(video,target);
-        adBreakStates.get(video)?.resetPlaybackPosition(true);
+        adBreakStates.get(video)?.resetPlaybackPosition();
         if (activeWatchProgress) activeWatchProgress.currentTime = target;
       } catch (_) {
         startPositionApplied.delete(video);
@@ -600,17 +599,13 @@ const bootstrapScript = String.raw`(() => {
       let playbackPosition = Number.isFinite(video.currentTime) ? video.currentTime : 0;
       let shouldResume = false;
       let adActive = false;
-      let openingAdElapsedSeconds = 0;
       let openingAdShown = false;
-      let openingAdTriggerPosition = null;
+      let openingAdPendingPlayback = false;
       let seekStartPosition = null;
 
-      function resetPlaybackPosition(initializeOpeningAd=false) {
+      function resetPlaybackPosition() {
         if (!Number.isFinite(video.currentTime)) return;
         playbackPosition = video.currentTime;
-        if (initializeOpeningAd && openingAdTriggerPosition === null) {
-          openingAdTriggerPosition = playbackPosition + Math.max(0,openingAdDelaySeconds - openingAdElapsedSeconds);
-        }
       }
 
       function finishSeeking() {
@@ -619,59 +614,70 @@ const bootstrapScript = String.raw`(() => {
         const currentPosition = Number(video.currentTime);
         if (!Number.isFinite(currentPosition)) return;
         playbackPosition = currentPosition;
-        if (currentPosition <= previousPosition) return;
-
-        const crossedOpeningAd = !openingAdShown && Number.isFinite(openingAdTriggerPosition) &&
-          previousPosition < openingAdTriggerPosition && currentPosition >= openingAdTriggerPosition;
-        const crossedScheduledAd = previousPosition < nextAdBreakAt && currentPosition >= nextAdBreakAt;
-        if (!crossedOpeningAd && !crossedScheduledAd) return;
-
-        if (crossedOpeningAd) openingAdShown = true;
-        if (crossedScheduledAd) {
-          do {
-            nextAdBreakAt += adBreakIntervalSeconds;
-          } while (nextAdBreakAt <= currentPosition);
-        }
-        openAdBreak(crossedScheduledAd ? adBreakDurationSeconds : openingAdDurationSeconds);
+        if (adActive || currentPosition <= previousPosition) return;
+        if (previousPosition >= nextAdBreakAt || currentPosition < nextAdBreakAt) return;
+        do {
+          nextAdBreakAt += adBreakIntervalSeconds;
+        } while (nextAdBreakAt <= currentPosition);
+        openAdBreak();
       }
 
       function updateCountdown() {
         countdownLabel.textContent = 'إعلان — سيستأنف الفيديو خلال ' + secondsRemaining + ' ثوانٍ';
       }
 
-      function closeAdBreak() {
-        adFrame.src = 'about:blank';
-        overlay.remove();
-        adActive = false;
-        if (!shouldResume) {
-          if (video.ended) advanceEpisode(video,true);
-          return;
-        }
-        try { video.currentTime = savedPosition; }
-        catch (_) {}
+      function resumePlayback() {
         try {
           const playback = video.play();
           if (playback && typeof playback.catch === 'function') playback.catch(() => {});
         } catch (_) {}
       }
 
-      function openAdBreak(durationSeconds=adBreakDurationSeconds) {
+      function closeAdBreak() {
+        adFrame.src = 'about:blank';
+        overlay.remove();
+        adActive = false;
+        if (openingAdPendingPlayback) {
+          openingAdPendingPlayback = false;
+          resumePlayback();
+          return;
+        }
+        if (!shouldResume) {
+          if (video.ended) advanceEpisode(video,true);
+          return;
+        }
+        try { video.currentTime = savedPosition; }
+        catch (_) {}
+        resumePlayback();
+      }
+
+      function openAdBreak(durationSeconds=adBreakDurationSeconds, mountInPlayer=false) {
         adActive = true;
         savedPosition = Number.isFinite(video.currentTime) ? video.currentTime : 0;
         shouldResume = video.paused === false && !video.ended;
         if (shouldResume) video.pause();
         secondsRemaining = durationSeconds;
         updateCountdown();
-        if (document.fullscreenElement === player) {
-          overlay.className = 'akwam-ad-break akwam-ad-break-immersive';
+        const immersive = document.fullscreenElement === player || player.classList.contains('akwam-immersive-player');
+        overlay.className = immersive ? 'akwam-ad-break akwam-ad-break-immersive' : 'akwam-ad-break';
+        if (mountInPlayer || document.fullscreenElement === player) {
           player.appendChild(overlay);
         } else if (player.classList.contains('akwam-immersive-player')) {
-          overlay.className = 'akwam-ad-break akwam-ad-break-immersive';
           (document.body || document.documentElement).appendChild(overlay);
         } else {
           player.appendChild(overlay);
         }
         adFrame.src = adBridgeUrl || adLinkUrl;
+      }
+
+      // The five-second preroll is shown once, before the episode itself starts, so
+      // skipping the intro can never bypass it.
+      function showOpeningAd() {
+        if (openingAdShown || adActive) return false;
+        openingAdShown = true;
+        openingAdPendingPlayback = true;
+        openAdBreak(openingAdDurationSeconds, true);
+        return true;
       }
 
       function updatePlaybackProgress(endedEvent=false) {
@@ -692,17 +698,11 @@ const bootstrapScript = String.raw`(() => {
           if (Number.isFinite(currentPosition)) playbackPosition = currentPosition;
           return;
         }
-        const elapsedMediaSeconds = currentPosition - playbackPosition;
-        playbackPosition = currentPosition;
-        if (!Number.isFinite(elapsedMediaSeconds) || elapsedMediaSeconds <= 0) return;
         if (!openingAdShown) {
-          openingAdElapsedSeconds += elapsedMediaSeconds;
-          if (openingAdElapsedSeconds >= openingAdDelaySeconds) {
-            openingAdShown = true;
-            openAdBreak(openingAdDurationSeconds);
-            return;
-          }
+          showOpeningAd();
+          return;
         }
+        playbackPosition = currentPosition;
         if (currentPosition >= nextAdBreakAt) {
           do {
             nextAdBreakAt += adBreakIntervalSeconds;
@@ -712,21 +712,18 @@ const bootstrapScript = String.raw`(() => {
       }
 
       function willOccurBeforeEnd() {
-        if (adActive || video.paused !== false || video.ended || video.seeking || !Number.isFinite(video.duration)) return false;
+        if (adActive || !openingAdShown || video.paused !== false || video.ended || video.seeking || !Number.isFinite(video.duration)) return false;
         const remainingMediaSeconds = video.duration - Number(video.currentTime);
         const playbackRate = Number(video.playbackRate) || 1;
         const remainingPlaybackSeconds = remainingMediaSeconds / playbackRate;
-        const remainingOpeningAdSeconds = openingAdShown ? Infinity : openingAdDelaySeconds - openingAdElapsedSeconds;
         const remainingAdSeconds = nextAdBreakAt - Number(video.currentTime);
-        return remainingMediaSeconds > 0 && (
-          (remainingOpeningAdSeconds > 0 && remainingOpeningAdSeconds <= remainingPlaybackSeconds) ||
-          (remainingAdSeconds > 0 && remainingAdSeconds <= remainingPlaybackSeconds)
-        );
+        return remainingMediaSeconds > 0 && remainingAdSeconds > 0 && remainingAdSeconds <= remainingPlaybackSeconds;
       }
 
       adBreakStates.set(video, {
         updatePlaybackProgress,
         resetPlaybackPosition,
+        showOpeningAd,
         isActive:() => adActive,
         willOccurBeforeEnd
       });
@@ -970,12 +967,15 @@ const bootstrapScript = String.raw`(() => {
       }
       function togglePlayback() {
         if (video.paused || video.ended) {
+          const adBreak = adBreakStates.get(video);
+          if (adBreak?.isActive()) return;
           userPlaybackRequested.add(video);
           const player = video.closest('.plyr');
           if (player && document.fullscreenElement !== player && !player.classList.contains('akwam-immersive-player')) {
             togglePlayerFullscreen(player);
           }
           applyEpisodeStartPosition(video);
+          if (adBreak?.showOpeningAd()) return;
           try { const playback = video.play(); if (playback?.catch) playback.catch(() => {}); }
           catch (_) {}
         } else {
@@ -1092,7 +1092,7 @@ const bootstrapScript = String.raw`(() => {
         saveWatchProgress(video,true);
       });
       video.addEventListener("play", () => {
-        if (!userPlaybackRequested.has(video)) video.pause();
+        if (adBreakStates.get(video)?.isActive() || !userPlaybackRequested.has(video)) video.pause();
       });
       video.addEventListener("timeupdate", () => saveWatchProgress(video));
       video.addEventListener("pause", () => saveWatchProgress(video,true));
