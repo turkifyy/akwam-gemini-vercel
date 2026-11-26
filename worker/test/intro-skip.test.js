@@ -24,6 +24,7 @@ function makeVideo({duration = 1850, currentTime = 0, readyState = 2, source = "
     },
     closest() { return null; },
     play() { this.playCalls++; this.paused = false; return Promise.resolve(); },
+    pause() { this.paused = true; },
     addEventListener(name, listener) {
       const callbacks = listeners.get(name) || [];
       callbacks.push(listener);
@@ -69,31 +70,32 @@ function runBootstrap(pathname, videos = []) {
   return observers;
 }
 
-test("episode playback skips the intro once and autoplays", () => {
+test("episode pages stay paused until a deliberate play request", () => {
   const video = makeVideo();
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
-  assert.equal(video.currentTime, 85);
-  assert.equal(video.fastSeekCalls, 1);
-  assert.equal(video.playCalls, 1);
+  assert.equal(video.currentTime, 0);
+  assert.equal(video.fastSeekCalls, 0);
+  assert.equal(video.playCalls, 0);
 
   for (const event of ["durationchange","seeked","play","playing"]) video.emit(event);
-  assert.equal(video.fastSeekCalls, 1);
+  assert.equal(video.currentTime, 0);
+  assert.equal(video.playCalls, 0);
 });
 
-test("saved playback positions are preserved", () => {
+test("a paused video's existing position is left untouched", () => {
   const video = makeVideo({currentTime:120});
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
   assert.equal(video.currentTime, 120);
   assert.equal(video.fastSeekCalls, 0);
-  assert.equal(video.playCalls, 1);
+  assert.equal(video.playCalls, 0);
 });
 
-test("clips up to 85 seconds are not skipped and still autoplay", () => {
+test("clips up to 85 seconds remain paused at the start", () => {
   const video = makeVideo({duration:85});
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
   assert.equal(video.currentTime, 0);
   assert.equal(video.fastSeekCalls, 0);
-  assert.equal(video.playCalls, 1);
+  assert.equal(video.playCalls, 0);
 });
 
 test("movie pages are not affected", () => {
@@ -103,7 +105,7 @@ test("movie pages are not affected", () => {
   assert.equal(video.playCalls, 0);
 });
 
-test("intro skip and autoplay wait until frame data is available", () => {
+test("metadata events do not start playback or move the position without a click", () => {
   const video = makeVideo({readyState:0});
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
   assert.equal(video.currentTime, 0);
@@ -116,16 +118,16 @@ test("intro skip and autoplay wait until frame data is available", () => {
 
   video.readyState = 2;
   video.emit("loadeddata");
-  assert.equal(video.currentTime, 85);
-  assert.equal(video.playCalls, 1);
+  assert.equal(video.currentTime, 0);
+  assert.equal(video.playCalls, 0);
 });
 
 test("videos inserted after page load are handled", () => {
   const observers = runBootstrap("/site/en/watch/185231/105666/episode");
   const video = makeVideo();
   observers[0].callback([{addedNodes:[video]}]);
-  assert.equal(video.currentTime, 85);
-  assert.equal(video.playCalls, 1);
+  assert.equal(video.currentTime, 0);
+  assert.equal(video.playCalls, 0);
 });
 
 test("a manual seek back to the intro is preserved", () => {
@@ -140,17 +142,18 @@ test("a manual seek back to the intro is preserved", () => {
   video.seeking = false;
   video.emit("seeked");
   assert.equal(video.currentTime, 0);
-  assert.equal(video.fastSeekCalls, 1);
+  assert.equal(video.fastSeekCalls, 0);
 });
 
-test("currentTime is used when fastSeek is unavailable", () => {
+test("fast seeking is not used before the user requests playback", () => {
   const video = makeVideo();
   delete video.fastSeek;
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
-  assert.equal(video.currentTime, 85);
+  assert.equal(video.currentTime, 0);
+  assert.equal(video.playCalls, 0);
 });
 
-test("rejected autoplay retries muted", async () => {
+test("blocked autoplay is not retried muted", async () => {
   const video = makeVideo();
   video.play = () => {
     video.playCalls++;
@@ -158,11 +161,11 @@ test("rejected autoplay retries muted", async () => {
   };
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
   await Promise.resolve();
-  assert.equal(video.playCalls, 2);
-  assert.equal(video.muted, true);
+  assert.equal(video.playCalls, 0);
+  assert.equal(video.muted, false);
 });
 
-test("a failed muted autoplay can retry when the player becomes ready", async () => {
+test("canplay does not retry playback without a user request", async () => {
   const video = makeVideo();
   video.play = () => {
     video.playCalls++;
@@ -170,9 +173,8 @@ test("a failed muted autoplay can retry when the player becomes ready", async ()
   };
   runBootstrap("/site/en/watch/185231/105666/episode", [video]);
   await Promise.resolve();
-  await Promise.resolve();
-  assert.equal(video.playCalls, 2);
 
   video.emit("canplay");
-  assert.equal(video.playCalls, 3);
+  assert.equal(video.playCalls, 0);
+  assert.equal(video.muted, false);
 });

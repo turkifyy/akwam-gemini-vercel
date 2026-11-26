@@ -13,11 +13,46 @@ function createStorage() {
   };
 }
 
+function makeElement(tagName) {
+  const listeners = new Map();
+  const element = {
+    tagName,className:'',textContent:'',innerHTML:'',title:'',hidden:false,value:'',type:'',
+    attributes:{},dataset:{},style:{setProperty() {}},children:[],parentElement:null,
+    setAttribute(name,value) { this.attributes[name] = String(value); },
+    getAttribute(name) { return this.attributes[name] ?? null; },
+    addEventListener(name,callback) {
+      const callbacks = listeners.get(name) || [];
+      callbacks.push(callback);
+      listeners.set(name,callbacks);
+    },
+    dispatch(name,event={}) { for (const callback of listeners.get(name) || []) callback(event); },
+    appendChild(child) { this.children.push(child); child.parentElement = this; return child; },
+    append(...children) { for (const child of children) this.appendChild(child); },
+    remove() {
+      const index = this.parentElement?.children?.indexOf(this) ?? -1;
+      if (index >= 0) this.parentElement.children.splice(index,1);
+      this.parentElement = null;
+    },
+    contains(child) {
+      return child === this || this.children.some(item => item.contains?.(child));
+    },
+    closest() { return null; }
+  };
+  const classes = () => new Set(element.className.split(/\s+/).filter(Boolean));
+  element.classList = {
+    add(name) { const values = classes(); values.add(name); element.className = [...values].join(' '); },
+    contains(name) { return classes().has(name); }
+  };
+  element.listeners = listeners;
+  return element;
+}
+
 function createClassList() {
   const values = new Set();
   return {
     contains(name) { return values.has(name); },
     add(name) { values.add(name); },
+    remove(name) { values.delete(name); },
     toggle(name, force) {
       const active = force === undefined ? !values.has(name) : Boolean(force);
       if (active) values.add(name);
@@ -38,6 +73,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
   };
   const intervals = [];
   const timers = [];
+  const actions = [];
   const orientationListeners = new Map();
   const orientation = options.orientation ? {
     type:'portrait-primary',
@@ -87,13 +123,34 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
     setAttribute() {}
   };
   const player = {
+    dataset:{},
     classList:playerClassList,
     children:[],
     appendChild(element) { this.children.push(element); element.parentElement = this; return element; },
-    querySelector(selector) { return selector === 'button[data-plyr="fullscreen"]' ? button : null; }
+    addEventListener(name,callback) {
+      const callbacks = listeners.get('player:' + name) || [];
+      callbacks.push(callback);
+      listeners.set('player:' + name,callbacks);
+    },
+    querySelector(selector) {
+      if (selector === 'button[data-plyr="fullscreen"]') return button;
+      if (selector === '.plyr__video-wrapper') return videoWrapper;
+      const className = selector.startsWith('.') ? selector.slice(1) : '';
+      const visit = parent => {
+        for (const child of parent.children || []) {
+          if (child.classList?.contains(className)) return child;
+          const nested = visit(child);
+          if (nested) return nested;
+        }
+        return null;
+      };
+      return visit(this);
+    }
   };
+  const videoWrapper = makeElement('DIV');
   if (options.nativeFullscreen) {
     player.requestFullscreen = function (settings) {
+      actions.push('fullscreen');
       this.fullscreenOptions = settings;
       if (options.rejectFullscreen) return Promise.reject(new Error('Fullscreen unavailable'));
       fullscreenElement = this;
@@ -109,25 +166,41 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
   const video = {
     nodeType:1,
     tagName:'VIDEO',
-    readyState:4,
+    readyState:options.readyState ?? 4,
     duration:options.duration ?? 1800,
     currentTime:0,
     playbackRate:1,
     seeking:false,
     muted:false,
-    paused:false,
+    paused:true,
     ended:false,
     playCalls:0,
     pauseCalls:0,
     closest(selector) { return selector === '.plyr' ? player : null; },
-    play() { this.paused = false; this.playCalls++; return Promise.resolve(); },
-    pause() { this.paused = true; this.pauseCalls++; },
+    play() {
+      actions.push('play');
+      this.paused = false;
+      this.playCalls++;
+      for (const name of ['play','playing']) for (const callback of videoListeners.get(name) || []) callback();
+      return Promise.resolve();
+    },
+    pause() {
+      this.paused = true;
+      this.pauseCalls++;
+      for (const callback of videoListeners.get('pause') || []) callback();
+    },
+    removeAttribute() {},
     addEventListener(name, callback) {
       const callbacks = videoListeners.get(name) || [];
       callbacks.push(callback);
       videoListeners.set(name, callbacks);
     }
   };
+  let currentTime = options.currentTime ?? 0;
+  Object.defineProperty(video,'currentTime',{
+    get() { return currentTime; },
+    set(value) { currentTime = value; actions.push('seek'); }
+  });
   const seriesLink = {href:'https://worker.example/site/en/series/5744/show'};
   const episodeId = 102320 + episode;
   const episodeLink = {
@@ -142,6 +215,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
   };
   const document = {
     readyState:'complete',
+    title:'Test | Turkify',
     documentElement:root,
     body,
     get fullscreenElement() { return fullscreenElement; },
@@ -152,17 +226,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
     },
     head:{appendChild(element) { mobileSearchStyles.push(element); }},
     createElement(tagName) {
-      const element = {
-        tagName,className:'',textContent:'',attributes:{},listeners:{},children:[],
-        setAttribute(name,value) { this.attributes[name] = String(value); },
-        addEventListener(name,callback) { this.listeners[name] = callback; },
-        appendChild(element) { this.children.push(element); element.parentElement = this; return element; },
-        remove() {
-          const index = this.parentElement?.children?.indexOf(this) ?? -1;
-          if (index >= 0) this.parentElement.children.splice(index,1);
-          this.parentElement = null;
-        }
-      };
+      const element = makeElement(tagName);
       Object.defineProperty(element,'src',{
         get() { return this._src || ''; },
         set(value) {
@@ -202,10 +266,11 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
       listeners.set(name, callbacks);
     }
   };
+  const pathname = options.pathname || `/site/en/watch/181288/${episodeId}/show/episode-${episode}`;
   const location = {
-    href:`https://worker.example/site/en/watch/181288/${episodeId}/show/episode-${episode}`,
+    href:`https://worker.example${pathname}`,
     origin:'https://worker.example',
-    pathname:`/site/en/watch/181288/${episodeId}/show/episode-${episode}`,
+    pathname,
     assign(url) { navigation.push(url); }
   };
   const navigation = [];
@@ -223,8 +288,9 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
   };
   class MutationObserver { observe() {} }
   class XMLHttpRequest { open() {} }
+  const localStorage = options.localStorage || createStorage();
   const context = {
-    window,document,location,sessionStorage,localStorage:createStorage(),
+    window,document,location,sessionStorage,localStorage,
     XMLHttpRequest,history:{pushState() {},replaceState() {}},MutationObserver,
     URL,Request,console,clock,
     Date:class extends Date { static now() { return clock.now; } },
@@ -236,7 +302,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
 
   vm.runInNewContext(bootstrapScript, context);
   for (const callback of videoListeners.get('seeked') || []) callback();
-  return {player,body,button,document,listeners,messages,sessionStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,timers,orientation,video,videoListeners,navigation,window,windowListeners,clock,setFullscreenElement(value) { fullscreenElement = value; dispatchDocumentEvent('fullscreenchange'); }};
+  return {player,body,button,document,listeners,messages,sessionStorage,localStorage,mobileSearchStyles,searchToggle,searchInput,searchButtons,userProfile,intervals,timers,orientation,video,videoListeners,navigation,window,windowListeners,clock,actions,setFullscreenElement(value) { fullscreenElement = value; dispatchDocumentEvent('fullscreenchange'); }};
 }
 
 function clickFullscreen(page) {
@@ -252,6 +318,23 @@ function dispatchVideoEvent(page, name) {
   for (const callback of page.videoListeners.get(name) || []) callback();
 }
 
+function clickCenterPlay(page) {
+  const button = page.player.querySelector('.akwam-player-center-button');
+  assert.ok(button);
+  button.dispatch('click',{stopPropagation() {}});
+}
+
+function clickSeriesPoster(page) {
+  const link = {href:'https://worker.example/site/en/series/5744/show'};
+  const event = {
+    target:{nodeType:1,closest(selector) { return selector === 'a[href]' ? link : null; }},
+    prevented:false,
+    preventDefault() { this.prevented = true; }
+  };
+  for (const listener of page.listeners.get('click') || []) listener(event);
+  return event;
+}
+
 function getAdBreak(page) {
   return [...page.body.children,...page.player.children].find(element => element.className.includes('akwam-ad-break'));
 }
@@ -264,42 +347,94 @@ test("mobile search is reachable and focuses the existing search form", () => {
   assert.equal(button.attributes["aria-label"], "Search");
   assert.equal(button.insertedBefore, page.userProfile);
   assert.match(page.mobileSearchStyles.map(style => style.textContent).join("\n"), /@media\(max-width:767px\)/);
-  button.listeners.click();
+  button.listeners.get('click')[0]();
   assert.equal(page.searchToggle.clickCount, 1);
   assert.equal(page.searchInput.focused, true);
 });
 
-test('episode 1 starts in the immersive player layout', () => {
+test('episodes wait for an explicit play click before filling the screen', () => {
   const page = runWatchPage(1);
-  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
-  assert.equal(page.messages.some(({message}) => message.type === 'player-immersive' && message.active === true), true);
+  assert.equal(page.video.playCalls, 0);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
+  assert.equal(page.messages.some(({message}) => message.type === 'player-immersive' && message.active === true), false);
 });
 
-test('episode 2 and later request the immersive player layout', () => {
-  for (const episode of [2,3,8]) {
-    const page = runWatchPage(episode);
-    assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
-    assert.equal(page.messages.some(({message}) => message.type === 'player-immersive' && message.active === true), true);
-  }
+test('the center play click requests fullscreen, seeks to 85 seconds, then plays', () => {
+  const page = runWatchPage(1, undefined, {nativeFullscreen:true,orientation:{}});
+  assert.equal(page.video.playCalls, 0);
+  clickCenterPlay(page);
+
+  assert.deepEqual(page.actions.slice(0,3), ['fullscreen','seek','play']);
+  assert.equal(page.video.currentTime, 85);
+  assert.equal(page.document.fullscreenElement, page.player);
+  assert.equal(page.orientation.lockCalls.includes('landscape'), true);
 });
 
-test('manual exit stays on the current episode while later episodes auto-expand', () => {
+test('a click before metadata seeks as soon as the adaptive stream exposes duration', () => {
+  const page = runWatchPage(1, undefined, {readyState:0,nativeFullscreen:true});
+  clickCenterPlay(page);
+  assert.equal(page.video.playCalls, 1);
+  assert.equal(page.video.currentTime, 0);
+
+  page.video.readyState = 1;
+  dispatchVideoEvent(page,'loadedmetadata');
+  assert.equal(page.video.currentTime, 85);
+  assert.equal(page.actions.at(-1), 'seek');
+});
+
+test('episode progress survives navigation and matching-series poster clicks resume it', () => {
+  const localStorage = createStorage();
+  const episode = runWatchPage(1, undefined, {localStorage});
+  clickCenterPlay(episode);
+  episode.clock.now += 6000;
+  episode.video.currentTime = 241;
+  dispatchVideoEvent(episode,'timeupdate');
+  const saved = JSON.parse(localStorage.getItem('akwam-watch-progress-v1:5744'));
+  assert.equal(saved.episodeNumber, 1);
+  assert.equal(saved.episodePath, '/watch/181288/102321/show/episode-1');
+  assert.equal(saved.currentTime, 241);
+
+  const series = runWatchPage(1, undefined, {
+    localStorage,
+    pathname:'/site/en/series/5744/show'
+  });
+  assert.equal(JSON.parse(localStorage.getItem('akwam-watch-progress-v1:5744')).currentTime, 241);
+  const click = clickSeriesPoster(series);
+  assert.equal(click.prevented, true);
+  assert.equal(series.navigation[0].includes('/watch/181288/102321/'), true);
+  assert.equal(JSON.parse(localStorage.getItem('akwam-watch-progress-v1:5744')).currentTime, 241);
+
+  const resumedEpisode = runWatchPage(1, undefined, {localStorage});
+  assert.equal(JSON.parse(localStorage.getItem('akwam-watch-progress-v1:5744')).currentTime, 241);
+  clickCenterPlay(resumedEpisode);
+  assert.equal(resumedEpisode.video.currentTime, 241);
+});
+
+test('a third-party autoplay attempt is paused until the user presses play', () => {
+  const page = runWatchPage(1);
+  page.video.paused = false;
+  dispatchVideoEvent(page,'play');
+  assert.equal(page.video.paused, true);
+  assert.equal(page.video.playCalls, 0);
+});
+
+test('fullscreen stays exited until the user explicitly re-enters', () => {
   const sessionStorage = createStorage();
-  const episodeOne = runWatchPage(1, sessionStorage);
-  clickFullscreen(episodeOne);
-  assert.equal(episodeOne.player.classList.contains('akwam-immersive-player'), false);
+  const page = runWatchPage(1, sessionStorage);
+  clickFullscreen(page);
+  clickFullscreen(page);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
 
-  const episodeOneAgain = runWatchPage(1, sessionStorage);
-  assert.equal(episodeOneAgain.player.classList.contains('akwam-immersive-player'), false);
-  const episodeTwo = runWatchPage(2, sessionStorage);
-  assert.equal(episodeTwo.player.classList.contains('akwam-immersive-player'), true);
+  const laterEpisode = runWatchPage(2, sessionStorage);
+  assert.equal(laterEpisode.player.classList.contains('akwam-immersive-player'), false);
 });
 
-test('old series-wide dismissal does not block automatic mode', () => {
+test('old immersion dismissals still start paused and out of fullscreen', () => {
   const sessionStorage = createStorage();
   sessionStorage.setItem('akwam-immersive-dismissed-v1:5744', '1');
   const page = runWatchPage(3, sessionStorage);
-  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
+  assert.equal(page.video.playCalls, 0);
 });
 
 test('only the sponsored fullscreen link can open an external popup', () => {
@@ -331,6 +466,7 @@ test('only the sponsored fullscreen link can open an external popup', () => {
 
 test('fullscreen ad pauses at the exact position and resumes after fifteen seconds', () => {
   const page = runWatchPage(1);
+  clickCenterPlay(page);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
   page.video.currentTime = 590.375;
   page.video.seeking = true;
@@ -378,12 +514,12 @@ test('fullscreen ad pauses at the exact position and resumes after fifteen secon
   assert.equal(adFrame.src, 'about:blank');
   assert.equal(page.video.currentTime, 600.375);
   assert.equal(page.video.paused, false);
-  assert.equal(page.video.playCalls, 1);
+  assert.equal(page.video.playCalls, 2);
 });
 
 test('native fullscreen ad stays inside the fullscreen player above the video', () => {
   const page = runWatchPage(1, undefined, {nativeFullscreen:true});
-  clickFullscreen(page);
+  clickCenterPlay(page);
   page.video.currentTime = 599;
   page.video.currentTime += 1;
   dispatchVideoEvent(page,'timeupdate');
@@ -399,8 +535,10 @@ test('native fullscreen ad stays inside the fullscreen player above the video', 
 test('playing from minute nine triggers the minute-ten ad before episode advance in fullscreen', () => {
   const page = runWatchPage(1, createStorage(), {
     duration:670,
+    nativeFullscreen:true,
     nextEpisodeUrl:'https://worker.example/site/en/watch/181288/102322/show/episode-2'
   });
+  clickCenterPlay(page);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
   page.video.currentTime = 540;
   page.video.seeking = true;
@@ -473,7 +611,7 @@ test('an episode ending at the ad mark waits for the ad before advancing', () =>
 
   assert.ok(getAdBreak(page));
   assert.equal(page.navigation.length, 0);
-  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
 
   for (let second = 0; second < 14; second++) tick();
   assert.equal(page.navigation.length, 0);
@@ -503,6 +641,7 @@ test('paused time does not count toward the next ad break', () => {
 
 test('a manual seek past the ad mark does not trigger immediately', () => {
   const page = runWatchPage(1);
+  clickCenterPlay(page);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
   page.video.currentTime = 600;
   page.video.seeking = true;
@@ -519,6 +658,7 @@ test('a manual seek past the ad mark does not trigger immediately', () => {
 
 test('non-immersive ads remain constrained to the video player', () => {
   const page = runWatchPage(1);
+  clickCenterPlay(page);
   clickFullscreen(page);
   page.video.currentTime = 599;
   page.video.currentTime += 1;
@@ -533,6 +673,7 @@ test('non-immersive ads remain constrained to the video player', () => {
 
 test('manual toggle can re-enable immersive mode', () => {
   const page = runWatchPage(1);
+  clickFullscreen(page);
   clickFullscreen(page);
   clickFullscreen(page);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
@@ -708,9 +849,9 @@ test('parent bridge releases immersion when the iframe navigates to a browse pag
   assert.equal(frame.style.height, '');
 });
 
-test('starting an episode automatically opens fullscreen in landscape', () => {
+test('starting an episode from the center button opens fullscreen in landscape', () => {
   const page = runWatchPage(1, undefined, {nativeFullscreen:true, orientation:{}});
-  dispatchVideoEvent(page,'play');
+  clickCenterPlay(page);
 
   assert.equal(page.document.fullscreenElement, page.player);
   assert.equal(page.orientation.lockCalls.includes('landscape'), true);

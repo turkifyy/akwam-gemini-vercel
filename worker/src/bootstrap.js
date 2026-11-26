@@ -107,6 +107,62 @@ export const bootstrapScript = String.raw`(() => {
     }
   }
 
+  const watchProgressStoragePrefix = 'akwam-watch-progress-v1:';
+  let activeWatchProgress = null;
+  const userPlaybackRequested = new WeakSet();
+  const userProgressInteraction = new WeakSet();
+
+  function readWatchProgress(seriesId) {
+    try {
+      const raw = localStorage.getItem(watchProgressStoragePrefix + seriesId) || '';
+      if (!raw) return null;
+      if (/^\/(?:episode\/\d+|watch\/\d+\/\d+)(?:\/|$)/.test(raw)) {
+        return {episodePath:raw,episodeNumber:0,currentTime:0,duration:0};
+      }
+      const saved = JSON.parse(raw);
+      if (typeof saved?.episodePath !== 'string' || !/^\/(?:episode\/\d+|watch\/\d+\/\d+)(?:\/|$)/.test(saved.episodePath)) return null;
+      const currentTime = Number(saved.currentTime);
+      const duration = Number(saved.duration);
+      return {
+        episodePath:saved.episodePath,
+        episodeNumber:Number.isSafeInteger(Number(saved.episodeNumber)) ? Number(saved.episodeNumber) : 0,
+        currentTime:Number.isFinite(currentTime) ? Math.max(0,currentTime) : 0,
+        duration:Number.isFinite(duration) ? Math.max(0,duration) : 0
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function writeWatchProgress(progress) {
+    if (!progress) return;
+    const now = Date.now();
+    try {
+      localStorage.setItem(progress.key, JSON.stringify({
+        version:2,
+        episodePath:progress.episodePath,
+        episodeNumber:progress.episodeNumber,
+        currentTime:Math.max(0,Number(progress.currentTime) || 0),
+        duration:Math.max(0,Number(progress.duration) || 0),
+        updatedAt:now
+      }));
+      progress.lastSavedAt = now;
+    } catch (_) {}
+  }
+
+  function saveWatchProgress(video, force=false) {
+    const progress = activeWatchProgress;
+    const currentTime = Number(video.currentTime);
+    const now = Date.now();
+    if (!progress || !Number.isFinite(currentTime) || currentTime < 0 ||
+        (!userPlaybackRequested.has(video) && !userProgressInteraction.has(video))) return;
+    if (!force && now - progress.lastSavedAt < 5000) return;
+    progress.currentTime = currentTime;
+    const duration = Number(video.duration);
+    if (Number.isFinite(duration) && duration > 0) progress.duration = duration;
+    writeWatchProgress(progress);
+  }
+
   function installWatchProgress() {
     const episodePath = location.pathname.slice(routePath.length) || '/';
     const episodePage = /^\/episode\/\d+(?:\/|$)/.test(episodePath);
@@ -119,10 +175,24 @@ export const bootstrapScript = String.raw`(() => {
         ? null
         : document.querySelector('.breadcrumb a[href*="/episode/"], h2 a[href*="/episode/"], a[href*="/episode/"]');
       const episodeUrl = new URL(episodeLink?.href || location.href, location.href);
-      const episodeRoute = episodeUrl.pathname.match(/^\/(?:site|catalog)\/[^/]+(\/episode\/\d+(?:\/.*)?)$/);
+      const episodeRoute = watchPage
+        ? location.pathname.match(/^\/(?:site|catalog)\/[^/]+(\/watch\/\d+\/\d+(?:\/.*)?)$/)
+        : episodeUrl.pathname.match(/^\/(?:site|catalog)\/[^/]+(\/episode\/\d+(?:\/.*)?)$/);
       if (episodeRoute) {
-        try { localStorage.setItem('akwam-watch-progress-v1:' + seriesId, episodeRoute[1]); }
-        catch (_) {}
+        const saved = readWatchProgress(seriesId);
+        const isSameEpisode = saved?.episodePath === episodeRoute[1];
+        const labelNumber = String(episodeLink?.innerText || '').match(/\d+/g)?.at(-1);
+        const pathNumber = episodeRoute[1].match(/episode[-_\s]*(\d+)/i)?.[1];
+        activeWatchProgress = {
+          key:watchProgressStoragePrefix + seriesId,
+          seriesId,
+          episodePath:episodeRoute[1],
+          episodeNumber:Number(labelNumber || pathNumber || (isSameEpisode ? saved.episodeNumber : 0)) || 0,
+          currentTime:isSameEpisode ? saved.currentTime : 0,
+          duration:isSameEpisode ? saved.duration : 0,
+          lastSavedAt:0
+        };
+        writeWatchProgress(activeWatchProgress);
       }
     }
 
@@ -134,21 +204,19 @@ export const bootstrapScript = String.raw`(() => {
       let destination;
       try { destination = new URL(link.href, location.href); }
       catch (_) { return; }
+      if (destination.origin !== location.origin || episodePage || watchPage) return;
       const targetSeriesId = destination.pathname.match(/\/series\/(\d+)(?:\/|$)/)?.[1];
-      if (!targetSeriesId || destination.hash !== '#series-episodes') return;
+      if (!targetSeriesId) return;
+      const saved = readWatchProgress(targetSeriesId);
 
-      const progressKey = 'akwam-watch-progress-v1:' + targetSeriesId;
-      let savedPath = '';
-      try { savedPath = localStorage.getItem(progressKey) || ''; }
-      catch (_) {}
-
-      if (/^\/episode\/\d+(?:\/|$)/.test(savedPath)) {
+      if (saved?.episodePath) {
         event.preventDefault();
-        const resumeUrl = new URL(routePath + savedPath, location.origin);
+        const resumeUrl = new URL(routePath + saved.episodePath, location.origin);
         if (parentOrigin && !seoMode) resumeUrl.searchParams.set('__parent', parentOrigin);
         location.assign(resumeUrl.href);
         return;
       }
+      if (destination.hash !== '#series-episodes') return;
 
       const episodes = document.querySelector('#series-episodes') || document;
       const links = [...episodes.querySelectorAll('a[href*="/episode/"]')]
@@ -187,10 +255,7 @@ export const bootstrapScript = String.raw`(() => {
     const attachedVideos = new WeakSet();
     const adBreakVideos = new WeakSet();
     const adBreakStates = new WeakMap();
-    const autoplayPending = new WeakSet();
-    const autoplayStarted = new WeakSet();
-    const introSkipPending = new WeakSet();
-    const introSkipAttempted = new WeakSet();
+    const startPositionApplied = new WeakSet();
     const advancedVideos = new WeakSet();
     const lastPlaybackPositions = new WeakMap();
     const seekGraceUntil = new WeakMap();
@@ -213,7 +278,6 @@ export const bootstrapScript = String.raw`(() => {
       try { return typeof screen !== 'undefined' && screen && screen.orientation ? screen.orientation : null; }
       catch (_) { return null; }
     })();
-    let manualFullscreenExit = false;
     let playerWasFullscreen = false;
 
     function lockOrientation(mode) {
@@ -233,32 +297,6 @@ export const bootstrapScript = String.raw`(() => {
       const applyPortrait = () => lockOrientation('portrait');
       applyPortrait();
       if (typeof setTimeout === 'function') setTimeout(applyPortrait, 180);
-    }
-
-    function autoFullscreenAllowed() {
-      return !manualFullscreenExit && !immersiveDismissed();
-    }
-
-    function autoFullscreenForPlayback(video) {
-      if (!autoFullscreenAllowed()) return;
-      const player = video.closest('.plyr');
-      if (!player || document.fullscreenElement === player || nativeFullscreenPlayer === player) return;
-      const requestFullscreen = player.requestFullscreen;
-      if (typeof requestFullscreen !== 'function') return;
-      setImmersive(player,true,false);
-      nativeFullscreenPlayer = player;
-      try {
-        const request = requestFullscreen.call(player,{navigationUI:'hide'});
-        if (request && typeof request.catch === 'function') {
-          request.catch(() => {
-            if (nativeFullscreenPlayer === player) nativeFullscreenPlayer = null;
-            setImmersive(player,true,false);
-          });
-        }
-      } catch (_) {
-        nativeFullscreenPlayer = null;
-        setImmersive(player,true,false);
-      }
     }
 
     function resolveNextEpisode() {
@@ -337,27 +375,7 @@ export const bootstrapScript = String.raw`(() => {
       '@media(max-width:600px){.akwam-ad-frame-shell{inset:8px!important;border-radius:8px!important}.akwam-ad-countdown{top:12px!important;left:12px!important;padding:6px 9px!important;font-size:12px!important}}';
     (document.head || document.documentElement).appendChild(immersiveStyle);
 
-    function immersiveDismissKey() {
-      const episodeLink = document.querySelector('h2 a[href*="/episode/"], .breadcrumb a[href*="/episode/"], a[href*="/episode/"]');
-      try {
-        const path = new URL(episodeLink?.href || location.href, location.href).pathname;
-        const segments = path.split('/').filter(Boolean);
-        const episodeIndex = segments.indexOf('episode');
-        const watchIndex = segments.indexOf('watch');
-        const episodeId = episodeIndex >= 0 ? segments[episodeIndex + 1]
-          : watchIndex >= 0 ? segments[watchIndex + 2] : '';
-        return episodeId ? 'akwam-immersive-dismissed-v2:' + episodeId : '';
-      } catch (_) { return ''; }
-    }
-
-    function immersiveDismissed() {
-      const key = immersiveDismissKey();
-      if (!key) return false;
-      try { return sessionStorage.getItem(key) === '1'; }
-      catch (_) { return false; }
-    }
-
-    function setImmersive(player, active, manual=false) {
+    function setImmersive(player, active) {
       player.classList.toggle('akwam-immersive-player', active);
       document.documentElement.classList.toggle('akwam-immersive-page', active);
       const button = player.querySelector('button[data-plyr="fullscreen"]');
@@ -370,14 +388,6 @@ export const bootstrapScript = String.raw`(() => {
         customButton.title = label;
       }
       post('player-immersive', {active});
-
-      const key = immersiveDismissKey();
-      if (manual && key) {
-        try {
-          if (active) sessionStorage.removeItem(key);
-          else sessionStorage.setItem(key, '1');
-        } catch (_) {}
-      }
     }
 
     function exitNativeFullscreen() {
@@ -388,7 +398,6 @@ export const bootstrapScript = String.raw`(() => {
     }
 
     function exitPlayerFullscreen(player) {
-      manualFullscreenExit = true;
       // Ask the parent frame to rotate too; it is the top-level document and can hold
       // the orientation lock even when the player lives inside the iframe.
       post('player-orientation', {mode:'portrait'});
@@ -401,7 +410,7 @@ export const bootstrapScript = String.raw`(() => {
         if (fallbackTimer) clearTimeout(fallbackTimer);
         try { screenOrientation?.removeEventListener?.('change', onOrientationChange); } catch (_) {}
         if (document.fullscreenElement === player) exitNativeFullscreen();
-        else setImmersive(player,false,true);
+        else setImmersive(player,false);
         restorePlatformPortrait();
       };
       const onOrientationChange = () => {
@@ -420,7 +429,7 @@ export const bootstrapScript = String.raw`(() => {
       });
     }
 
-    function togglePlayerFullscreen(player, manual = true) {
+    function togglePlayerFullscreen(player) {
       if (document.fullscreenElement === player) {
         exitPlayerFullscreen(player);
         return;
@@ -428,8 +437,7 @@ export const bootstrapScript = String.raw`(() => {
       if (nativeFullscreenPlayer === player) return;
       if (nativeFullscreenUnavailable.has(player)) {
         nativeFullscreenUnavailable.delete(player);
-        setImmersive(player,false,true);
-        manualFullscreenExit = true;
+        setImmersive(player,false);
         restorePlatformPortrait();
         return;
       }
@@ -437,15 +445,14 @@ export const bootstrapScript = String.raw`(() => {
       const requestFullscreen = player.requestFullscreen;
       if (typeof requestFullscreen !== 'function') {
         const active = player.classList.contains('akwam-immersive-player');
-        setImmersive(player,!active,true);
+        setImmersive(player,!active);
         if (active) {
-          manualFullscreenExit = true;
           restorePlatformPortrait();
         }
         return;
       }
 
-      setImmersive(player,true,manual);
+      setImmersive(player,true);
       nativeFullscreenPlayer = player;
       try {
         const request = requestFullscreen.call(player,{navigationUI:'hide'});
@@ -477,28 +484,10 @@ export const bootstrapScript = String.raw`(() => {
       nativeFullscreenPlayer = null;
       if (player) {
         nativeFullscreenUnavailable.delete(player);
-        setImmersive(player,false,true);
+        setImmersive(player,false);
       }
-      manualFullscreenExit = true;
       restorePlatformPortrait();
     }, true);
-
-    function currentEpisodeNumber() {
-      const episodeLink = document.querySelector('h2 a[href*="/episode/"], .breadcrumb a[href*="/episode/"], a[href*="/episode/"]');
-      const labelNumber = String(episodeLink?.innerText || '').match(/\d+/g)?.at(-1);
-      if (labelNumber) return Number(labelNumber);
-
-      let path = location.pathname;
-      try { path = decodeURIComponent(path); }
-      catch (_) {}
-      return Number(path.match(/(?:episode|الحلقة)[\s_-]*(\d+)(?:\/|$)/i)?.[1] || 0);
-    }
-
-    function enableImmersiveForEpisode(video) {
-      const player = video.closest('.plyr');
-      if (!player) return;
-      setImmersive(player, currentEpisodeNumber() >= 1 && !immersiveDismissed());
-    }
 
     document.addEventListener('click', event => {
       const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
@@ -520,64 +509,27 @@ export const bootstrapScript = String.raw`(() => {
         exitPlayerFullscreen(player);
       } else {
         nativeFullscreenUnavailable.delete(player);
-        setImmersive(player, false, true);
-        manualFullscreenExit = true;
+        setImmersive(player, false);
         restorePlatformPortrait();
       }
     }, true);
 
-    function skipEpisodeIntro(video) {
-      if (video.readyState < 2 || video.seeking || seekGraceActive(video) || introSkipPending.has(video) || introSkipAttempted.has(video)) return;
-      const duration = video.duration;
-      if (Number.isFinite(duration) && duration > 85 && video.currentTime < 85) {
-        introSkipPending.add(video);
-        introSkipAttempted.add(video);
-        try {
-          if (typeof video.fastSeek === 'function') video.fastSeek(85);
-          else video.currentTime = 85;
-          lastPlaybackPositions.set(video,85);
-        } catch (_) {
-          try {
-            video.currentTime = 85;
-            lastPlaybackPositions.set(video,85);
-          }
-          catch (_) {
-            introSkipPending.delete(video);
-            introSkipAttempted.delete(video);
-          }
-        }
+    function applyEpisodeStartPosition(video) {
+      if (!userPlaybackRequested.has(video) || startPositionApplied.has(video) || video.readyState < 1) return;
+      const duration = Number(video.duration);
+      if (!Number.isFinite(duration) || duration <= 0) return;
+      const savedTime = activeWatchProgress?.currentTime || 0;
+      const requestedTime = savedTime > 0 ? savedTime : (duration > 85 ? 85 : 0);
+      const target = Math.min(requestedTime, Math.max(0,duration - 0.25));
+      startPositionApplied.add(video);
+      if (Math.abs(Number(video.currentTime) - target) < 1) return;
+      try {
+        video.currentTime = target;
+        lastPlaybackPositions.set(video,target);
+        if (activeWatchProgress) activeWatchProgress.currentTime = target;
+      } catch (_) {
+        startPositionApplied.delete(video);
       }
-    }
-
-    function autoplayEpisode(video) {
-      if (video.readyState < 2 || autoplayStarted.has(video) || autoplayPending.has(video)) return;
-      if (video.paused === false) {
-        autoplayStarted.add(video);
-        return;
-      }
-      autoplayPending.add(video);
-      const finish = started => {
-        autoplayPending.delete(video);
-        if (started) autoplayStarted.add(video);
-      };
-      const attempt = mutedFallback => {
-        if (mutedFallback) video.muted = true;
-        try {
-          const playback = video.play();
-          if (playback && typeof playback.then === 'function') {
-            playback.then(() => finish(true), () => {
-              if (!video.muted) attempt(true);
-              else finish(false);
-            });
-          } else {
-            finish(true);
-          }
-        } catch (_) {
-          if (!video.muted) attempt(true);
-          else finish(false);
-        }
-      };
-      attempt(false);
     }
 
     function installAdBreak(video) {
@@ -945,7 +897,12 @@ export const bootstrapScript = String.raw`(() => {
       }
       function togglePlayback() {
         if (video.paused || video.ended) {
-          autoFullscreenForPlayback(video);
+          userPlaybackRequested.add(video);
+          const player = video.closest('.plyr');
+          if (player && document.fullscreenElement !== player && !player.classList.contains('akwam-immersive-player')) {
+            togglePlayerFullscreen(player);
+          }
+          applyEpisodeStartPosition(video);
           try { const playback = video.play(); if (playback?.catch) playback.catch(() => {}); }
           catch (_) {}
         } else {
@@ -981,6 +938,7 @@ export const bootstrapScript = String.raw`(() => {
       });
       seek.addEventListener('input',() => {
         if (Number.isFinite(video.duration) && video.duration > 0) {
+          userProgressInteraction.add(video);
           markSeekGrace(video);
           lastPlaybackPositions.set(video,video.duration * Number(seek.value) / 1000);
           video.currentTime = video.duration * Number(seek.value) / 1000;
@@ -1003,8 +961,8 @@ export const bootstrapScript = String.raw`(() => {
       player.addEventListener('keydown',event => {
         if (event.target?.closest?.('button,input,select')) return;
         if (event.code === 'Space' || event.key === 'k') { event.preventDefault(); togglePlayback(); }
-        else if (event.key === 'ArrowRight') { event.preventDefault(); video.currentTime = Math.min(video.duration || 0,video.currentTime + 10); }
-        else if (event.key === 'ArrowLeft') { event.preventDefault(); video.currentTime = Math.max(0,video.currentTime - 10); }
+        else if (event.key === 'ArrowRight') { event.preventDefault(); userProgressInteraction.add(video); video.currentTime = Math.min(video.duration || 0,video.currentTime + 10); }
+        else if (event.key === 'ArrowLeft') { event.preventDefault(); userProgressInteraction.add(video); video.currentTime = Math.max(0,video.currentTime - 10); }
       });
 
       ui.append(heading,center,controls,settings);
@@ -1036,46 +994,44 @@ export const bootstrapScript = String.raw`(() => {
 
     function watchVideo(video) {
       if (video.tagName !== "VIDEO") return;
+      const alreadyAttached = attachedVideos.has(video);
+      if (!alreadyAttached) {
+        try {
+          video.autoplay = false;
+          video.preload = 'metadata';
+          video.removeAttribute?.('autoplay');
+        } catch (_) {}
+      }
       installCustomPlayer(video);
       installAdBreak(video);
-      if (attachedVideos.has(video)) return;
+      if (alreadyAttached) return;
       attachedVideos.add(video);
+      window.addEventListener('pagehide',() => saveWatchProgress(video,true));
       lastPlaybackPositions.set(video,Number(video.currentTime));
       video.addEventListener("seeking", () => {
         markSeekGrace(video);
         lastPlaybackPositions.set(video,Number(video.currentTime));
+        saveWatchProgress(video,true);
       });
       video.addEventListener("seeked", () => {
         markSeekGrace(video);
         lastPlaybackPositions.set(video,Number(video.currentTime));
-        introSkipPending.delete(video);
+        saveWatchProgress(video,true);
       });
-      for (const eventName of ["durationchange","play","playing"]) {
-        video.addEventListener(eventName, () => skipEpisodeIntro(video));
-      }
-      for (const eventName of ["loadeddata","canplay"]) {
-        video.addEventListener(eventName, () => {
-          skipEpisodeIntro(video);
-          autoplayEpisode(video);
-        });
-      }
       video.addEventListener("play", () => {
-        autoFullscreenForPlayback(video);
+        if (!userPlaybackRequested.has(video)) video.pause();
       });
-      video.addEventListener("playing", () => {
-        autoplayPending.delete(video);
-        autoplayStarted.add(video);
-      });
+      video.addEventListener("timeupdate", () => saveWatchProgress(video));
+      video.addEventListener("pause", () => saveWatchProgress(video,true));
       video.addEventListener("timeupdate", () => advanceEpisode(video));
-      video.addEventListener("ended", () => advanceEpisode(video, true));
-      video.addEventListener("loadedmetadata", () => {
-        skipEpisodeIntro(video);
-        autoplayEpisode(video);
-        enableImmersiveForEpisode(video);
+      video.addEventListener("ended", () => {
+        saveWatchProgress(video,true);
+        advanceEpisode(video,true);
       });
-      skipEpisodeIntro(video);
-      autoplayEpisode(video);
-      enableImmersiveForEpisode(video);
+      for (const eventName of ["loadedmetadata","durationchange","loadeddata"]) {
+        video.addEventListener(eventName,() => applyEpisodeStartPosition(video));
+      }
+      if (video.paused === false) video.pause();
     }
 
     function watchVideos(root) {
