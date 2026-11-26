@@ -493,7 +493,7 @@ test('only the sponsored fullscreen link can open an external popup', () => {
   assert.equal(page.window.open('https://unapproved.example/','_blank'), null);
 });
 
-test('fullscreen ad pauses at the exact position and resumes after fifteen seconds', () => {
+test('fullscreen ad pauses at the exact position and resumes after thirty-five seconds', () => {
   const page = runWatchPage(1);
   clickCenterPlay(page);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
@@ -518,10 +518,10 @@ test('fullscreen ad pauses at the exact position and resumes after fifteen secon
   assert.equal(adFrame.src, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
   assert.equal(adFrame.attributes.title, 'إعلان ممول');
   assert.equal(adFrame.attributes.loading, 'eager');
-  assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+  assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-same-origin allow-forms allow-storage-access-by-user-activation');
   assert.equal(frameShell.className, 'akwam-ad-frame-shell');
   assert.equal(frameShell.children.length, 1);
-  assert.match(countdown.textContent, /15 ثوانٍ$/);
+  assert.match(countdown.textContent, /35 ثوانٍ$/);
   assert.equal(page.video.paused, true);
   assert.equal(page.video.pauseCalls, 1);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
@@ -530,11 +530,11 @@ test('fullscreen ad pauses at the exact position and resumes after fifteen secon
   assert.equal(overlay.className, 'akwam-ad-break akwam-ad-break-immersive');
   const playerStyles = page.mobileSearchStyles.map(style => style.textContent).join('\n');
   assert.match(playerStyles, /\.akwam-ad-break-immersive\{position:fixed!important;inset:0!important;z-index:2147483647!important\}/);
-  assert.match(playerStyles, /\.akwam-ad-frame-shell\{position:absolute!important;inset:10px!important;/);
+  assert.match(playerStyles, /\.akwam-ad-frame-shell\{position:absolute!important;inset:10px!important;overflow:hidden!important;border:0!important;border-radius:0!important;background:transparent!important;/);
   assert.match(playerStyles, /\.akwam-ad-frame-shell\{inset:8px!important;/);
   assert.doesNotMatch(playerStyles, /akwam-ad-(?:fallback|hint|visit)/);
 
-  for (let second = 0; second < 14; second++) tick();
+  for (let second = 0; second < 34; second++) tick();
   assert.ok(page.body.children.includes(overlay));
   assert.match(countdown.textContent, /1 ثوانٍ$/);
   tick();
@@ -642,7 +642,7 @@ test('an episode ending at the ad mark waits for the ad before advancing', () =>
   assert.equal(page.navigation.length, 0);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
 
-  for (let second = 0; second < 14; second++) tick();
+  for (let second = 0; second < 34; second++) tick();
   assert.equal(page.navigation.length, 0);
   tick();
 

@@ -265,7 +265,7 @@ export const bootstrapScript = String.raw`(() => {
     const nativeFullscreenUnavailable = new WeakSet();
     let nativeFullscreenPlayer = null;
     const adBreakIntervalSeconds = 10 * 60;
-    const adBreakDurationSeconds = 15;
+    const adBreakDurationSeconds = 35;
     document.addEventListener('click', event => {
       const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
       const link = target?.closest?.('a[target="_blank"]');
@@ -395,8 +395,8 @@ export const bootstrapScript = String.raw`(() => {
       '.akwam-ad-supported:not(.akwam-immersive-player){position:relative!important}' +
       '.akwam-ad-break{position:absolute!important;inset:0!important;z-index:2147483646!important;display:grid!important;place-items:center!important;overflow:hidden!important;background:radial-gradient(circle at 50% 35%,#1b2740,#07090f 68%)!important}' +
       '.akwam-ad-break-immersive{position:fixed!important;inset:0!important;z-index:2147483647!important}' +
-      '.akwam-ad-frame-shell{position:absolute!important;inset:10px!important;overflow:hidden!important;border:1px solid #ffffff30!important;border-radius:12px!important;background:#fff!important;box-shadow:0 18px 64px #000b!important}' +
-      '.akwam-ad-frame{display:block!important;width:100%!important;height:100%!important;border:0!important;background:#fff!important}' +
+      '.akwam-ad-frame-shell{position:absolute!important;inset:10px!important;overflow:hidden!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:0 18px 64px #000b!important}' +
+      '.akwam-ad-frame{display:block!important;width:100%!important;height:100%!important;border:0!important;background:transparent!important}' +
       '.akwam-ad-countdown{position:absolute!important;top:14px!important;left:14px!important;z-index:4!important;padding:8px 12px!important;border:1px solid #ffffff30!important;border-radius:8px!important;color:#fff!important;background:#000b!important;font:600 14px/1.4 system-ui,sans-serif!important;pointer-events:none!important}' +
       '@media(max-width:600px){.akwam-ad-frame-shell{inset:8px!important;border-radius:8px!important}.akwam-ad-countdown{top:12px!important;left:12px!important;padding:6px 9px!important;font-size:12px!important}}';
     (document.head || document.documentElement).appendChild(immersiveStyle);
@@ -578,7 +578,7 @@ export const bootstrapScript = String.raw`(() => {
       adFrame.setAttribute('title','إعلان ممول');
       adFrame.setAttribute('loading','eager');
       adFrame.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
-      adFrame.setAttribute('sandbox','allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+      adFrame.setAttribute('sandbox','allow-scripts allow-same-origin allow-forms allow-storage-access-by-user-activation');
       adFrame.src = 'about:blank';
       adFrameShell.appendChild(adFrame);
 

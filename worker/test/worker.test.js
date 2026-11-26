@@ -352,6 +352,7 @@ test('the player ad iframe is routed through the Worker bridge', async () => {
   const bootstrap = await readFile(new URL('../src/bootstrap.js', import.meta.url), 'utf8');
   const source = await readFile(new URL('../src/index.js', import.meta.url), 'utf8');
   assert.match(bootstrap, /adFrame\.src = adBridgeUrl \|\| adLinkUrl/);
+  assert.match(bootstrap, /adFrame\.setAttribute\('sandbox','allow-scripts allow-same-origin allow-forms allow-storage-access-by-user-activation'\)/);
   assert.match(source, /adBridgeUrl:workerOrigin \+ '\/__bridge\/ad'/);
 });
 
