@@ -668,6 +668,7 @@ const bootstrapScript = String.raw`(() => {
           player.appendChild(overlay);
         }
         adFrame.src = adBridgeUrl || adLinkUrl;
+        restartTicker();
       }
 
       // The fifteen-second preroll is shown once, before the episode itself starts, so
@@ -734,7 +735,8 @@ const bootstrapScript = String.raw`(() => {
       video.addEventListener('seeked',finishSeeking);
       video.addEventListener('ratechange',resetPlaybackPosition);
 
-      setInterval(() => {
+      let tickHandle = null;
+      function tick() {
         if (adActive) {
           secondsRemaining -= 1;
           if (secondsRemaining <= 0) closeAdBreak();
@@ -742,7 +744,16 @@ const bootstrapScript = String.raw`(() => {
           return;
         }
         updatePlaybackProgress();
-      },1000);
+      }
+      // Restart the one-second ticker whenever an ad opens so its first tick —
+      // and therefore its first countdown step — is a full second away.
+      function restartTicker() {
+        if (tickHandle !== null && typeof clearInterval === 'function') {
+          try { clearInterval(tickHandle); } catch (_) {}
+        }
+        tickHandle = setInterval(tick,1000);
+      }
+      restartTicker();
     }
 
     let customPlayerStyle;
