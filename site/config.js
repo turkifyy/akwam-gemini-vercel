@@ -1,4 +1,6 @@
 window.AKWAM_WORKER_URL = "https://turkifyseries.osamalovirboy.workers.dev";
+const isSmartphone = window.navigator?.userAgentData?.mobile === true ||
+  /iPhone|iPod|Android.*Mobile|Windows Phone|IEMobile|BlackBerry|BB10/i.test(window.navigator?.userAgent || '');
 
 function installPlayerFullscreenBridge() {
   const frame = document.querySelector('#site-frame');
@@ -18,7 +20,7 @@ function installPlayerFullscreenBridge() {
   })();
 
   function lockOrientation(mode) {
-    if (!screenOrientation || typeof screenOrientation.lock !== 'function') return Promise.resolve(false);
+    if (!isSmartphone || !screenOrientation || typeof screenOrientation.lock !== 'function') return Promise.resolve(false);
     try { return Promise.resolve(screenOrientation.lock(mode)).then(() => true, () => false); }
     catch (_) { return Promise.resolve(false); }
   }
@@ -51,11 +53,18 @@ function installPlayerFullscreenBridge() {
     setImmersive(false);
   }
 
+  function enforcePlatformPortrait() {
+    if (!frameImmersive && !nativeFullscreen) restorePortraitOrientation();
+  }
+
   window.addEventListener('message', event => {
     if (event.origin !== workerOrigin || event.source !== frame.contentWindow) return;
     const data = event.data;
     if (data?.source !== 'akwam-gemini-bridge') return;
-    if (data.type === 'player-page' && data.watch === false) releaseImmersive();
+    if (data.type === 'player-page' && data.watch === false) {
+      releaseImmersive();
+      restorePortraitOrientation();
+    }
     if (data.type === 'player-immersive' && typeof data.active === 'boolean') {
       if (data.active && Date.now() < staleMessageUntil) return;
       frameImmersive = data.active;
@@ -79,6 +88,10 @@ function installPlayerFullscreenBridge() {
   });
 
   window.addEventListener('pagehide', releaseImmersive);
+  window.addEventListener('orientationchange', enforcePlatformPortrait);
+  window.addEventListener('focus', enforcePlatformPortrait);
+  try { screenOrientation?.addEventListener?.('change', enforcePlatformPortrait); } catch (_) {}
+  restorePortraitOrientation();
 }
 
 if (document.readyState === 'loading') {

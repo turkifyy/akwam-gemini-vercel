@@ -15,7 +15,17 @@
   <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
   <link rel="shortcut icon" href="/favicon.ico">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-  <link rel="manifest" href="/site.webmanifest">
+ <script>
+ (() => {
+   const nav = navigator;
+   const isSmartphone = nav.userAgentData?.mobile === true ||
+     /iPhone|iPod|Android.*Mobile|Windows Phone|IEMobile|BlackBerry|BB10/i.test(nav.userAgent || '');
+   const manifest = document.createElement('link');
+   manifest.rel = 'manifest';
+   manifest.href = isSmartphone ? '/site-mobile.webmanifest' : '/site.webmanifest';
+   document.head.appendChild(manifest);
+ })();
+ </script>
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Turkify Series">
 <meta property="og:title" content="Turkify Series | مسلسلات مترجمة بلغتك">
