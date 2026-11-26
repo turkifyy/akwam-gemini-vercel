@@ -552,11 +552,14 @@ const bootstrapScript = String.raw`(() => {
       const requestedTime = savedTime > 0 ? savedTime : (duration > 85 ? 85 : 0);
       const target = Math.min(requestedTime, Math.max(0,duration - 0.25));
       startPositionApplied.add(video);
-      if (Math.abs(Number(video.currentTime) - target) < 1) return;
+      if (Math.abs(Number(video.currentTime) - target) < 1) {
+        adBreakStates.get(video)?.resetPlaybackPosition(true);
+        return;
+      }
       try {
         video.currentTime = target;
         lastPlaybackPositions.set(video,target);
-        adBreakStates.get(video)?.resetPlaybackPosition();
+        adBreakStates.get(video)?.resetPlaybackPosition(true);
         if (activeWatchProgress) activeWatchProgress.currentTime = target;
       } catch (_) {
         startPositionApplied.delete(video);
@@ -599,16 +602,37 @@ const bootstrapScript = String.raw`(() => {
       let adActive = false;
       let openingAdElapsedSeconds = 0;
       let openingAdShown = false;
+      let openingAdTriggerPosition = null;
+      let seekStartPosition = null;
 
-      function resetPlaybackPosition() {
-        if (Number.isFinite(video.currentTime)) playbackPosition = video.currentTime;
+      function resetPlaybackPosition(initializeOpeningAd=false) {
+        if (!Number.isFinite(video.currentTime)) return;
+        playbackPosition = video.currentTime;
+        if (initializeOpeningAd && openingAdTriggerPosition === null) {
+          openingAdTriggerPosition = playbackPosition + Math.max(0,openingAdDelaySeconds - openingAdElapsedSeconds);
+        }
       }
 
       function finishSeeking() {
-        resetPlaybackPosition();
+        const previousPosition = seekStartPosition ?? playbackPosition;
+        seekStartPosition = null;
         const currentPosition = Number(video.currentTime);
-        if (!Number.isFinite(currentPosition) || currentPosition < nextAdBreakAt) return;
-        nextAdBreakAt = (Math.floor(currentPosition / adBreakIntervalSeconds) + 1) * adBreakIntervalSeconds;
+        if (!Number.isFinite(currentPosition)) return;
+        playbackPosition = currentPosition;
+        if (currentPosition <= previousPosition) return;
+
+        const crossedOpeningAd = !openingAdShown && Number.isFinite(openingAdTriggerPosition) &&
+          previousPosition < openingAdTriggerPosition && currentPosition >= openingAdTriggerPosition;
+        const crossedScheduledAd = previousPosition < nextAdBreakAt && currentPosition >= nextAdBreakAt;
+        if (!crossedOpeningAd && !crossedScheduledAd) return;
+
+        if (crossedOpeningAd) openingAdShown = true;
+        if (crossedScheduledAd) {
+          do {
+            nextAdBreakAt += adBreakIntervalSeconds;
+          } while (nextAdBreakAt <= currentPosition);
+        }
+        openAdBreak(crossedScheduledAd ? adBreakDurationSeconds : openingAdDurationSeconds);
       }
 
       function updateCountdown() {
@@ -663,7 +687,8 @@ const bootstrapScript = String.raw`(() => {
           }
           return;
         }
-        if (video.paused !== false || video.readyState < 2 || video.seeking) {
+        if (video.seeking) return;
+        if (video.paused !== false || video.readyState < 2) {
           if (Number.isFinite(currentPosition)) playbackPosition = currentPosition;
           return;
         }
@@ -706,7 +731,9 @@ const bootstrapScript = String.raw`(() => {
         willOccurBeforeEnd
       });
 
-      video.addEventListener('seeking',resetPlaybackPosition);
+      video.addEventListener('seeking',() => {
+        if (seekStartPosition === null) seekStartPosition = playbackPosition;
+      });
       video.addEventListener('seeked',finishSeeking);
       video.addEventListener('ratechange',resetPlaybackPosition);
 
