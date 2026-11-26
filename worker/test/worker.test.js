@@ -5,6 +5,12 @@ import {runInNewContext} from 'node:vm';
 import worker from '../src/index.js';
 import {bootstrapScript} from '../src/bootstrap.js';
 
+function inlineNavigationScript(html) {
+  return [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
+    .map(match => match[1])
+    .find(source => source.includes('const navigationLabels')) || '';
+}
+
 test('episode headings remove only a repeated episode number', () => {
   const source = bootstrapScript.match(/function normalizeEpisodeTitle\(value\) \{[\s\S]*?\n  \}/)?.[0];
   assert.ok(source);
@@ -422,7 +428,7 @@ test('a 429 translation error is retryable and preserves the server retry delay'
 
 test('navigation labels follow the detected language and set the matching direction', async () => {
   const page = await readFile(new URL('../../site/index.html', import.meta.url), 'utf8');
-  const script = page.match(/<script>\s*([\s\S]*?)\s*<\/script>/)?.[1];
+  const script = inlineNavigationScript(page);
   const dictionarySource = script?.match(/const navigationLabels = (\{[\s\S]*?\n  \});/)?.[1];
   assert.ok(script);
   assert.ok(dictionarySource);
@@ -447,7 +453,7 @@ test('navigation labels follow the detected language and set the matching direct
 
 test('retry preserves the detail page and the active category returns to its listing', async () => {
   const page = await readFile(new URL('../../site/index.html', import.meta.url), 'utf8');
-  const script = page.slice(page.indexOf('<script>') + 8, page.lastIndexOf('</script>'));
+  const script = inlineNavigationScript(page);
   const harness = createNavigationHarness(script,{country:'US',language:'en'});
   await new Promise(resolve => setTimeout(resolve,0));
   const archive = harness.frame.src;
@@ -481,7 +487,7 @@ test('retry preserves the detail page and the active category returns to its lis
 
 test('the parent does not reload the frame while the translator retries a rate limit', async () => {
   const page = await readFile(new URL('../../site/index.html', import.meta.url), 'utf8');
-  const script = page.slice(page.indexOf('<script>') + 8, page.lastIndexOf('</script>'));
+  const script = inlineNavigationScript(page);
   const harness = createNavigationHarness(script,{country:'US',language:'en'});
   await new Promise(resolve => setTimeout(resolve,0));
   harness.windowListeners.get('message')({
@@ -576,7 +582,7 @@ test('external popups are blocked while internal opens navigate in-frame', async
   assert.equal(assignments.length, 1);
 
   const page = await readFile(new URL('../../site/index.html', import.meta.url), 'utf8');
-  assert.match(page, /sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"/);
+  assert.match(page, /sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-orientation-lock"/);
 });
 
 test('visitor endpoint uses Cloudflare country without sharing the visitor IP', async t => {

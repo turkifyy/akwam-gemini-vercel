@@ -14,6 +14,7 @@ function installPlayerFullscreenBridge() {
   let frameImmersive = false;
   let nativeFullscreen = false;
   let staleMessageUntil = 0;
+  let portraitHoldUntil = 0;
   const screenOrientation = (() => {
     try { return typeof screen !== 'undefined' && screen && screen.orientation ? screen.orientation : null; }
     catch (_) { return null; }
@@ -25,8 +26,19 @@ function installPlayerFullscreenBridge() {
     catch (_) { return Promise.resolve(false); }
   }
 
-  function restorePortraitOrientation() {
+  // Leaving fullscreen releases the browser's orientation lock. Keep asking for
+  // portrait for a short window so a late landscape sensor reading cannot leave
+  // the platform sideways after the player closes.
+  function restorePortraitOrientation(duration = 2400) {
+    if (!isSmartphone) return;
+    portraitHoldUntil = Math.max(portraitHoldUntil, Date.now() + duration);
     lockOrientation('portrait');
+    if (typeof setTimeout !== 'function') return;
+    setTimeout(() => {
+      if (Date.now() <= portraitHoldUntil && !frameImmersive && !nativeFullscreen) {
+        lockOrientation('portrait');
+      }
+    }, 220);
   }
 
   function setImmersive(active) {
@@ -69,8 +81,10 @@ function installPlayerFullscreenBridge() {
       if (data.active && Date.now() < staleMessageUntil) return;
       frameImmersive = data.active;
       syncImmersive();
-      if (data.active) lockOrientation('landscape');
-      else restorePortraitOrientation();
+      if (data.active) {
+        portraitHoldUntil = 0;
+        lockOrientation('landscape');
+      } else restorePortraitOrientation();
     }
     if (data.type === 'player-orientation' && data.mode === 'portrait') restorePortraitOrientation();
   });
@@ -78,6 +92,7 @@ function installPlayerFullscreenBridge() {
   document.addEventListener('fullscreenchange', () => {
     nativeFullscreen = document.fullscreenElement === frame;
     if (nativeFullscreen) {
+      portraitHoldUntil = 0;
       lockOrientation('landscape');
     } else {
       frameImmersive = false;
@@ -89,6 +104,7 @@ function installPlayerFullscreenBridge() {
 
   window.addEventListener('pagehide', releaseImmersive);
   window.addEventListener('orientationchange', enforcePlatformPortrait);
+  window.addEventListener('resize', enforcePlatformPortrait);
   window.addEventListener('focus', enforcePlatformPortrait);
   try { screenOrientation?.addEventListener?.('change', enforcePlatformPortrait); } catch (_) {}
   restorePortraitOrientation();

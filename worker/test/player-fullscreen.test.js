@@ -1064,3 +1064,25 @@ test('exit still completes when the orientation lock is refused', async () => {
   for (const timer of page.timers) timer.callback();
   assert.equal(page.document.fullscreenElement, null);
 });
+
+test('the embedded player frame is allowed to lock the screen orientation', async () => {
+  const html = await readFile(new URL('../../site/index.html', import.meta.url), 'utf8');
+  const sandbox = html.match(/id="site-frame"[\s\S]*?sandbox="([^"]+)"/)?.[1] || '';
+  assert.match(sandbox, /\ballow-orientation-lock\b/);
+});
+
+test('a late landscape reading after exit is pushed back to portrait', async () => {
+  const page = runWatchPage(1, undefined, {nativeFullscreen:true, orientation:{}});
+  clickFullscreen(page);
+  assert.equal(page.document.fullscreenElement, page.player);
+  clickFullscreen(page);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(page.document.fullscreenElement, null);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
+
+  page.orientation.lockCalls.length = 0;
+  page.orientation.type = 'landscape-primary';
+  page.orientation.dispatchChange();
+
+  assert.equal(page.orientation.lockCalls.includes('portrait'), true);
+});
