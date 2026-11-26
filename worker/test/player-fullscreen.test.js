@@ -46,7 +46,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
     lock(mode) {
       this.lockCalls.push(mode);
       if (options.orientation.lockFails) return Promise.reject(new Error('Lock unavailable'));
-      this.type = mode + '-primary';
+      if (!(options.orientation.deferPortrait && mode === 'portrait')) this.type = mode + '-primary';
       return Promise.resolve();
     },
     unlock() { this.unlockCalls += 1; },
@@ -717,8 +717,8 @@ test('starting an episode automatically opens fullscreen in landscape', () => {
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
 });
 
-test('leaving fullscreen rotates to portrait before the browser chrome returns', async () => {
-  const page = runWatchPage(1, undefined, {nativeFullscreen:true, orientation:{}});
+test('leaving fullscreen waits for the device to finish rotating to portrait', async () => {
+  const page = runWatchPage(1, undefined, {nativeFullscreen:true, orientation:{deferPortrait:true}});
   clickFullscreen(page);
   assert.equal(page.document.fullscreenElement, page.player);
   page.orientation.lockCalls.length = 0;
@@ -727,10 +727,11 @@ test('leaving fullscreen rotates to portrait before the browser chrome returns',
   await new Promise(resolve => setImmediate(resolve));
 
   assert.deepEqual(page.orientation.lockCalls, ['portrait']);
-  assert.equal(page.orientation.type, 'portrait-primary');
+  assert.equal(page.orientation.type, 'landscape-primary');
   assert.equal(page.document.fullscreenElement, page.player);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
 
+  page.orientation.type = 'portrait-primary';
   page.orientation.dispatchChange();
 
   assert.equal(page.document.fullscreenElement, null);

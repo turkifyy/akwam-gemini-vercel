@@ -393,37 +393,31 @@ const bootstrapScript = String.raw`(() => {
       // the orientation lock even when the player lives inside the iframe.
       post('player-orientation', {mode:'portrait'});
       let settled = false;
+      let fallbackTimer;
+      const isPortrait = () => /^portrait/.test(String(screenOrientation?.type || ''));
       const finish = () => {
         if (settled) return;
         settled = true;
+        if (fallbackTimer) clearTimeout(fallbackTimer);
         try { screenOrientation?.removeEventListener?.('change', onOrientationChange); } catch (_) {}
         if (document.fullscreenElement === player) exitNativeFullscreen();
         else setImmersive(player,false,true);
         restorePlatformPortrait();
       };
       const onOrientationChange = () => {
-        // Ignore transient sensor changes; only leave fullscreen once the device is
-        // actually upright, otherwise the platform could reappear in landscape.
-        if (/^portrait/.test(String(screenOrientation?.type || ''))) finish();
+        if (isPortrait()) finish();
       };
       if (!screenOrientation || typeof screenOrientation.lock !== 'function' || typeof setTimeout !== 'function') {
         finish();
         return;
       }
-      // Browsers only grant an orientation lock while a document is fullscreen, so lock
-      // portrait before leaving fullscreen. The device is then already upright when the
-      // browser chrome returns and the platform never lands back in landscape.
+      try { screenOrientation.addEventListener?.('change', onOrientationChange); } catch (_) {}
+      // Keep fullscreen active until the device reports portrait. A lock can resolve
+      // before a slow device has finished rotating, so use the change event as the cue.
+      fallbackTimer = setTimeout(finish, 1600);
       lockOrientation('portrait').then(locked => {
-        if (!locked) {
-          // The parent page shares the same screen and may still hold the lock right,
-          // so give it a moment to rotate before the player leaves fullscreen.
-          setTimeout(finish, 420);
-          return;
-        }
-        try { screenOrientation.addEventListener?.('change', onOrientationChange); } catch (_) {}
-        setTimeout(finish, 450);
+        if (locked && isPortrait()) finish();
       });
-      setTimeout(finish, 650);
     }
 
     function togglePlayerFullscreen(player, manual = true) {
