@@ -774,6 +774,52 @@ test('non-immersive ads remain constrained to the video player', () => {
   assert.equal(overlay.className, 'akwam-ad-break');
 });
 
+test('exiting fullscreen during the opening ad keeps it inside the player', () => {
+  const page = runWatchPage(1, undefined, {nativeFullscreen:true});
+  clickCenterPlay(page);
+  const overlay = getAdBreak(page);
+  assert.ok(overlay);
+  assert.equal(page.player.children.includes(overlay), true);
+  assert.equal(overlay.className, 'akwam-ad-break akwam-ad-break-immersive');
+
+  page.setFullscreenElement(null);
+  assert.equal(page.document.fullscreenElement, null);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
+  assert.equal(page.player.children.includes(overlay), true);
+  assert.equal(page.body.children.includes(overlay), false);
+  assert.equal(overlay.className, 'akwam-ad-break');
+  assert.match(overlay.children[1].textContent, /ثوانٍ$/);
+
+  const tick = page.intervals.find(timer => timer.delay === 1000).callback;
+  for (let second = 0; second < 15; second++) tick();
+  assert.equal(getAdBreak(page), undefined);
+  assert.equal(page.video.paused, false);
+});
+
+test('exiting fullscreen during a mid-roll ad keeps it inside the player', () => {
+  const page = runWatchPage(1);
+  clickCenterPlay(page);
+  const tick = page.intervals.find(timer => timer.delay === 1000).callback;
+  for (let second = 0; second < 15; second++) tick();
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
+
+  page.video.currentTime = 600;
+  page.video.seeking = true;
+  dispatchVideoEvent(page,'seeking');
+  page.video.seeking = false;
+  dispatchVideoEvent(page,'seeked');
+  const overlay = getAdBreak(page);
+  assert.ok(overlay);
+  assert.equal(page.body.children.includes(overlay), true);
+  assert.equal(overlay.className, 'akwam-ad-break akwam-ad-break-immersive');
+
+  clickFullscreen(page);
+  assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
+  assert.equal(page.player.children.includes(overlay), true);
+  assert.equal(page.body.children.includes(overlay), false);
+  assert.equal(overlay.className, 'akwam-ad-break');
+});
+
 test('manual toggle can re-enable immersive mode', () => {
   const page = runWatchPage(1);
   clickFullscreen(page);

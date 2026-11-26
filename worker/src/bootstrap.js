@@ -257,6 +257,7 @@ export const bootstrapScript = String.raw`(() => {
     const attachedVideos = new WeakSet();
     const adBreakVideos = new WeakSet();
     const adBreakStates = new WeakMap();
+    const adBreakControllers = new Set();
     const startPositionApplied = new WeakSet();
     const advancedVideos = new WeakSet();
     const lastPlaybackPositions = new WeakMap();
@@ -415,6 +416,7 @@ export const bootstrapScript = String.raw`(() => {
         customButton.title = label;
       }
       post('player-immersive', {active});
+      for (const controller of adBreakControllers) controller.syncPlacement();
     }
 
     function exitNativeFullscreen() {
@@ -658,8 +660,6 @@ export const bootstrapScript = String.raw`(() => {
         if (shouldResume) video.pause();
         secondsRemaining = durationSeconds;
         updateCountdown();
-        const immersive = document.fullscreenElement === player || player.classList.contains('akwam-immersive-player');
-        overlay.className = immersive ? 'akwam-ad-break akwam-ad-break-immersive' : 'akwam-ad-break';
         if (mountInPlayer || document.fullscreenElement === player) {
           player.appendChild(overlay);
         } else if (player.classList.contains('akwam-immersive-player')) {
@@ -667,8 +667,24 @@ export const bootstrapScript = String.raw`(() => {
         } else {
           player.appendChild(overlay);
         }
+        syncPlacement();
         adFrame.src = adBridgeUrl || adLinkUrl;
         restartTicker();
+      }
+
+      // Keep an active ad visually attached to the player. A fullscreen ad stays in
+      // the player subtree (the only subtree the browser renders in native
+      // fullscreen), while leaving fullscreen pulls it back inside the player so it
+      // can never stretch over the platform UI.
+      function syncPlacement() {
+        if (!adActive) return;
+        const nativeFullscreen = document.fullscreenElement === player;
+        const immersive = nativeFullscreen || player.classList.contains('akwam-immersive-player');
+        overlay.className = immersive ? 'akwam-ad-break akwam-ad-break-immersive' : 'akwam-ad-break';
+        if ((nativeFullscreen || !immersive) && overlay.parentElement !== player) {
+          try { overlay.remove(); } catch (_) {}
+          player.appendChild(overlay);
+        }
       }
 
       // The fifteen-second preroll is shown once, before the episode itself starts, so
@@ -721,13 +737,16 @@ export const bootstrapScript = String.raw`(() => {
         return remainingMediaSeconds > 0 && remainingAdSeconds > 0 && remainingAdSeconds <= remainingPlaybackSeconds;
       }
 
-      adBreakStates.set(video, {
+      const controller = {
         updatePlaybackProgress,
         resetPlaybackPosition,
         showOpeningAd,
+        syncPlacement,
         isActive:() => adActive,
         willOccurBeforeEnd
-      });
+      };
+      adBreakStates.set(video, controller);
+      adBreakControllers.add(controller);
 
       video.addEventListener('seeking',() => {
         if (seekStartPosition === null) seekStartPosition = playbackPosition;
