@@ -276,6 +276,10 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
   const navigation = [];
   const window = {
     __AKWAM_BRIDGE__:{lang:'en',parentOrigin:'https://parent.example',upstreamHost:'akwam.ss'},
+    navigator:options.navigator || {
+      userAgent:options.mobile === false ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' : 'Mozilla/5.0 (iPhone)',
+      userAgentData:{mobile:options.mobile !== false}
+    },
     fetch:() => Promise.resolve(),
     openCalls:[],
     open(...args) { this.openCalls.push(args); return {}; },
@@ -338,6 +342,31 @@ function clickSeriesPoster(page) {
 function getAdBreak(page) {
   return [...page.body.children,...page.player.children].find(element => element.className.includes('akwam-ad-break'));
 }
+
+test('only smartphones receive the standalone portrait manifest', async () => {
+  const html = await readFile(new URL('../../site/index.html', import.meta.url), 'utf8');
+  const inlineScript = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
+    .find(([, source]) => source.includes('site-mobile.webmanifest'))?.[1];
+  assert.ok(inlineScript);
+
+  const selectManifest = navigator => {
+    let selected;
+    const document = {
+      createElement() { return {}; },
+      head:{appendChild(link) { selected = link.href; }}
+    };
+    vm.runInNewContext(inlineScript, {navigator,document});
+    return selected;
+  };
+
+  assert.equal(selectManifest({userAgentData:{mobile:true}}), '/site-mobile.webmanifest');
+  assert.equal(selectManifest({userAgent:'Mozilla/5.0 (iPhone)',userAgentData:{mobile:false}}), '/site-mobile.webmanifest');
+  assert.equal(selectManifest({userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',userAgentData:{mobile:false}}), '/site.webmanifest');
+
+  const manifest = JSON.parse(await readFile(new URL('../../site/site-mobile.webmanifest', import.meta.url), 'utf8'));
+  assert.equal(manifest.display, 'standalone');
+  assert.equal(manifest.orientation, 'portrait');
+});
 
 test("mobile search is reachable and focuses the existing search form", () => {
   const page = runWatchPage(1);
@@ -858,6 +887,28 @@ test('starting an episode from the center button opens fullscreen in landscape',
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
 });
 
+test('desktop playback does not request orientation locks', () => {
+  const page = runWatchPage(1, undefined, {nativeFullscreen:true, orientation:{}, mobile:false});
+  clickCenterPlay(page);
+
+  assert.equal(page.document.fullscreenElement, page.player);
+  assert.deepEqual(page.orientation.lockCalls, []);
+  page.setFullscreenElement(null);
+  assert.deepEqual(page.orientation.lockCalls, []);
+});
+
+test('iPhone user agent enables orientation locks without client hints', () => {
+  const page = runWatchPage(1, undefined, {
+    nativeFullscreen:true,
+    orientation:{},
+    mobile:false,
+    navigator:{userAgent:'Mozilla/5.0 (iPhone)',userAgentData:{mobile:false}}
+  });
+  clickCenterPlay(page);
+
+  assert.equal(page.orientation.lockCalls.includes('landscape'), true);
+});
+
 test('leaving fullscreen waits for the device to finish rotating to portrait', async () => {
   const page = runWatchPage(1, undefined, {nativeFullscreen:true, orientation:{deferPortrait:true}});
   clickFullscreen(page);
@@ -931,6 +982,7 @@ test('parent bridge locks landscape in fullscreen and restores portrait on exit'
   };
   const window = {
     AKWAM_WORKER_URL:'https://turkifyseries.osamalovirboy.workers.dev',
+    navigator:{userAgent:'Mozilla/5.0 (iPhone)',userAgentData:{mobile:true}},
     addEventListener(name, callback) { windowListeners.set(name, callback); }
   };
 
@@ -946,6 +998,7 @@ test('parent bridge locks landscape in fullscreen and restores portrait on exit'
     documentListeners.get('fullscreenchange')();
   };
 
+  assert.equal(lockCalls[0], 'portrait');
   nativeFullscreen(true);
   assert.equal(lockCalls.includes('landscape'), true);
   assert.equal(nav.hidden, true);
@@ -958,6 +1011,43 @@ test('parent bridge locks landscape in fullscreen and restores portrait on exit'
   lockCalls.length = 0;
   send({source:'akwam-gemini-bridge',type:'player-orientation',mode:'portrait'});
   assert.equal(lockCalls.at(-1), 'portrait');
+});
+
+test('parent bridge skips orientation locks on desktop', async () => {
+  const configSource = await readFile(new URL('../../site/config.js', import.meta.url), 'utf8');
+  const documentListeners = new Map();
+  const windowListeners = new Map();
+  const frame = {contentWindow:{},style:{top:'',height:'',zIndex:'',removeProperty() {}},addEventListener() {}};
+  const nav = {hidden:false,style:{display:''}};
+  const lockCalls = [];
+  let fullscreenElement = null;
+  const screen = {orientation:{lock(mode) { lockCalls.push(mode); return Promise.resolve(); }}};
+  const document = {
+    readyState:'complete',
+    get fullscreenElement() { return fullscreenElement; },
+    querySelector(selector) { return selector === '#site-frame' ? frame : nav; },
+    addEventListener(name, callback) { documentListeners.set(name, callback); }
+  };
+  const window = {
+    AKWAM_WORKER_URL:'https://turkifyseries.osamalovirboy.workers.dev',
+    navigator:{userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',userAgentData:{mobile:false}},
+    addEventListener(name, callback) { windowListeners.set(name, callback); }
+  };
+
+  vm.runInNewContext(configSource, {window,document,location:{href:'https://parent.example/'},URL,screen});
+  const send = data => windowListeners.get('message')({
+    origin:'https://turkifyseries.osamalovirboy.workers.dev',source:frame.contentWindow,data
+  });
+  send({source:'akwam-gemini-bridge',type:'player-immersive',active:true});
+  assert.equal(nav.hidden, true);
+  assert.deepEqual(lockCalls, []);
+
+  fullscreenElement = frame;
+  documentListeners.get('fullscreenchange')();
+  fullscreenElement = null;
+  documentListeners.get('fullscreenchange')();
+  send({source:'akwam-gemini-bridge',type:'player-immersive',active:false});
+  assert.deepEqual(lockCalls, []);
 });
 
 test('exit still completes when the orientation lock is refused', async () => {

@@ -1,6 +1,8 @@
 export const bootstrapScript = String.raw`(() => {
   'use strict';
   const config = window.__AKWAM_BRIDGE__ || {};
+  const isSmartphone = window.navigator?.userAgentData?.mobile === true ||
+    /iPhone|iPod|Android.*Mobile|Windows Phone|IEMobile|BlackBerry|BB10/i.test(window.navigator?.userAgent || '');
   const lang = String(config.lang || 'ar');
   const parentOrigin = String(config.parentOrigin || '');
   const upstreamHost = String(config.upstreamHost || 'akwam.ss');
@@ -281,7 +283,7 @@ export const bootstrapScript = String.raw`(() => {
     let playerWasFullscreen = false;
 
     function lockOrientation(mode) {
-      if (!screenOrientation || typeof screenOrientation.lock !== 'function') return Promise.resolve(false);
+      if (!isSmartphone || !screenOrientation || typeof screenOrientation.lock !== 'function') return Promise.resolve(false);
       try {
         return Promise.resolve(screenOrientation.lock(mode)).then(() => true, () => false);
       } catch (_) {
