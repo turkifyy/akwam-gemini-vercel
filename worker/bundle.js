@@ -281,6 +281,7 @@ const bootstrapScript = String.raw`(() => {
       catch (_) { return null; }
     })();
     let playerWasFullscreen = false;
+    let portraitHoldUntil = 0;
 
     function lockOrientation(mode) {
       if (!isSmartphone || !screenOrientation || typeof screenOrientation.lock !== 'function') return Promise.resolve(false);
@@ -292,13 +293,36 @@ const bootstrapScript = String.raw`(() => {
     }
 
     function lockFullscreenLandscape() {
+      portraitHoldUntil = 0;
       lockOrientation('landscape');
     }
 
-    function restorePlatformPortrait() {
-      const applyPortrait = () => lockOrientation('portrait');
-      applyPortrait();
-      if (typeof setTimeout === 'function') setTimeout(applyPortrait, 180);
+    // Exiting fullscreen releases the orientation lock, so the platform must ask for
+    // portrait again: once immediately (while the fullscreen document still holds the
+    // lock) and again across the next frames, when the unlock has actually happened.
+    function restorePlatformPortrait(duration = 2400) {
+      if (!isSmartphone) return;
+      portraitHoldUntil = Math.max(portraitHoldUntil, Date.now() + duration);
+      lockOrientation('portrait');
+      if (typeof setTimeout !== 'function') return;
+      for (const delay of [180, 520, 1000, 1800]) {
+        setTimeout(() => {
+          if (Date.now() <= portraitHoldUntil && !document.fullscreenElement) lockOrientation('portrait');
+        }, delay);
+      }
+    }
+
+    function reassertPlatformPortrait() {
+      if (!isSmartphone || Date.now() > portraitHoldUntil) return;
+      if (document.fullscreenElement) return;
+      if (/^portrait/.test(String(screenOrientation?.type || ''))) return;
+      lockOrientation('portrait');
+    }
+
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('orientationchange', reassertPlatformPortrait);
+      window.addEventListener('resize', reassertPlatformPortrait);
+      try { screenOrientation?.addEventListener?.('change', reassertPlatformPortrait); } catch (_) {}
     }
 
     function resolveNextEpisode() {
@@ -413,7 +437,9 @@ const bootstrapScript = String.raw`(() => {
         try { screenOrientation?.removeEventListener?.('change', onOrientationChange); } catch (_) {}
         if (document.fullscreenElement === player) exitNativeFullscreen();
         else setImmersive(player,false);
-        restorePlatformPortrait();
+        // Order matters: request portrait before exitNativeFullscreen() finishes, then
+        // keep re-asserting it while the browser tears fullscreen down and unlocks.
+        restorePlatformPortrait(2600);
       };
       const onOrientationChange = () => {
         if (isPortrait()) finish();
