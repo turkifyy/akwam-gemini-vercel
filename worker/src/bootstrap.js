@@ -265,7 +265,7 @@ export const bootstrapScript = String.raw`(() => {
     const nativeFullscreenUnavailable = new WeakSet();
     let nativeFullscreenPlayer = null;
     const adBreakIntervalSeconds = 10 * 60;
-    const adBreakDurationSeconds = 35;
+    const adBreakDurationSeconds = 45;
     document.addEventListener('click', event => {
       const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
       const link = target?.closest?.('a[target="_blank"]');

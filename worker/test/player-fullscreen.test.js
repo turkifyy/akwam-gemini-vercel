@@ -493,7 +493,7 @@ test('only the sponsored fullscreen link can open an external popup', () => {
   assert.equal(page.window.open('https://unapproved.example/','_blank'), null);
 });
 
-test('fullscreen ad pauses at the exact position and resumes after thirty-five seconds', () => {
+test('fullscreen ad pauses at the exact position and resumes after forty-five seconds', () => {
   const page = runWatchPage(1);
   clickCenterPlay(page);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
@@ -521,7 +521,7 @@ test('fullscreen ad pauses at the exact position and resumes after thirty-five s
   assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-same-origin allow-forms allow-storage-access-by-user-activation');
   assert.equal(frameShell.className, 'akwam-ad-frame-shell');
   assert.equal(frameShell.children.length, 1);
-  assert.match(countdown.textContent, /35 ثوانٍ$/);
+  assert.match(countdown.textContent, /45 ثوانٍ$/);
   assert.equal(page.video.paused, true);
   assert.equal(page.video.pauseCalls, 1);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
@@ -534,7 +534,7 @@ test('fullscreen ad pauses at the exact position and resumes after thirty-five s
   assert.match(playerStyles, /\.akwam-ad-frame-shell\{inset:8px!important;/);
   assert.doesNotMatch(playerStyles, /akwam-ad-(?:fallback|hint|visit)/);
 
-  for (let second = 0; second < 34; second++) tick();
+  for (let second = 0; second < 44; second++) tick();
   assert.ok(page.body.children.includes(overlay));
   assert.match(countdown.textContent, /1 ثوانٍ$/);
   tick();
@@ -642,7 +642,7 @@ test('an episode ending at the ad mark waits for the ad before advancing', () =>
   assert.equal(page.navigation.length, 0);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
 
-  for (let second = 0; second < 34; second++) tick();
+  for (let second = 0; second < 44; second++) tick();
   assert.equal(page.navigation.length, 0);
   tick();
 
