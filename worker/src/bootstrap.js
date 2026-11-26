@@ -15,7 +15,7 @@ export const bootstrapScript = String.raw`(() => {
   const seriesPage = /^\/series\/\d+(?:\/|$)/.test(pagePath);
   const prefix = location.origin + routePath;
   const adLinkUrl = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
-  const adBridgeUrl = String(config.adBridgeUrl || '');
+  const adBridgeUrl = String(config.adBridgeUrl || new URL('/__bridge/ad', location.origin).href);
   const originalFetch = window.fetch.bind(window);
   const originalOpen = typeof window.open === 'function' ? window.open.bind(window) : () => null;
 
@@ -585,7 +585,7 @@ export const bootstrapScript = String.raw`(() => {
       adFrame.setAttribute('title','إعلان ممول');
       adFrame.setAttribute('loading','eager');
       adFrame.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
-      adFrame.setAttribute('sandbox','allow-scripts allow-same-origin allow-forms allow-storage-access-by-user-activation');
+      adFrame.setAttribute('sandbox','allow-popups allow-popups-to-escape-sandbox');
       adFrame.src = 'about:blank';
       adFrameShell.appendChild(adFrame);
 
@@ -668,7 +668,7 @@ export const bootstrapScript = String.raw`(() => {
           player.appendChild(overlay);
         }
         syncPlacement();
-        adFrame.src = adBridgeUrl || adLinkUrl;
+        adFrame.src = adBridgeUrl;
         restartTicker();
       }
 
