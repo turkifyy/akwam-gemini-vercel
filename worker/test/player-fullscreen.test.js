@@ -572,10 +572,10 @@ test('fullscreen ad pauses at the exact position and resumes after forty-five se
   assert.equal(overlay.children.length, 2);
   assert.equal(adFrame.tagName, 'iframe');
   assert.equal(adFrame.className, 'akwam-ad-frame');
-  assert.equal(adFrame.src, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
+  assert.equal(adFrame.src, 'https://worker.example/__bridge/ad');
   assert.equal(adFrame.attributes.title, 'إعلان ممول');
   assert.equal(adFrame.attributes.loading, 'eager');
-  assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-same-origin allow-forms allow-storage-access-by-user-activation');
+  assert.equal(adFrame.attributes.sandbox, 'allow-popups allow-popups-to-escape-sandbox');
   assert.equal(frameShell.className, 'akwam-ad-frame-shell');
   assert.equal(frameShell.children.length, 1);
   assert.match(countdown.textContent, /45 ثوانٍ$/);
