@@ -493,7 +493,7 @@ test('only the sponsored fullscreen link can open an external popup', () => {
   assert.equal(page.window.open('https://unapproved.example/','_blank'), null);
 });
 
-test('opening ad runs for five seconds after 85 seconds of active playback', () => {
+test('opening ad also triggers when a forward seek crosses its pending mark', () => {
   const page = runWatchPage(1);
   clickCenterPlay(page);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
@@ -513,16 +513,6 @@ test('opening ad runs for five seconds after 85 seconds of active playback', () 
   page.video.currentTime = 500;
   page.video.seeking = false;
   dispatchVideoEvent(page,'seeked');
-  page.video.play();
-
-  for (let second = 0; second < 44; second++) {
-    page.video.currentTime += 1;
-    dispatchVideoEvent(page,'timeupdate');
-  }
-  assert.equal(getAdBreak(page), undefined);
-
-  page.video.currentTime += 1;
-  dispatchVideoEvent(page,'timeupdate');
   const overlay = getAdBreak(page);
   assert.ok(overlay);
   const [frameShell,countdown] = overlay.children;
@@ -536,14 +526,25 @@ test('opening ad runs for five seconds after 85 seconds of active playback', () 
   assert.match(countdown.textContent, /1 ثوانٍ$/);
   tick();
   assert.equal(page.body.children.includes(overlay), false);
-  assert.equal(page.video.currentTime, 545);
-  assert.equal(page.video.paused, false);
+  assert.equal(page.video.currentTime, 500);
+  assert.equal(page.video.paused, true);
 });
 
 test('fullscreen ad pauses at the exact position and resumes after forty-five seconds', () => {
   const page = runWatchPage(1);
   clickCenterPlay(page);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
+
+  for (let second = 0; second < 85; second++) {
+    page.video.currentTime += 1;
+    dispatchVideoEvent(page,'timeupdate');
+  }
+  const openingOverlay = getAdBreak(page);
+  assert.ok(openingOverlay);
+  assert.match(openingOverlay.children[1].textContent, /5 ثوانٍ$/);
+  for (let second = 0; second < 5; second++) tick();
+  assert.equal(getAdBreak(page), undefined);
+
   page.video.currentTime = 590.375;
   page.video.seeking = true;
   dispatchVideoEvent(page,'seeking');
@@ -570,7 +571,7 @@ test('fullscreen ad pauses at the exact position and resumes after forty-five se
   assert.equal(frameShell.children.length, 1);
   assert.match(countdown.textContent, /45 ثوانٍ$/);
   assert.equal(page.video.paused, true);
-  assert.equal(page.video.pauseCalls, 1);
+  assert.equal(page.video.pauseCalls, 2);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), true);
   assert.equal(page.body.children.includes(overlay), true);
   assert.equal(page.player.children.includes(overlay), false);
@@ -590,7 +591,7 @@ test('fullscreen ad pauses at the exact position and resumes after forty-five se
   assert.equal(adFrame.src, 'about:blank');
   assert.equal(page.video.currentTime, 600.375);
   assert.equal(page.video.paused, false);
-  assert.equal(page.video.playCalls, 2);
+  assert.equal(page.video.playCalls, 3);
 });
 
 test('native fullscreen ad stays inside the fullscreen player above the video', () => {
@@ -657,23 +658,18 @@ test('seeking near the episode end does not advance or exit fullscreen', () => {
 
 test('a pending opening ad delays episode advancement until the episode ends', () => {
   const nextEpisodeUrl = 'https://worker.example/site/en/watch/181288/102322/show/episode-2';
-  const page = runWatchPage(1, undefined, {duration:2000,nextEpisodeUrl});
-  page.video.paused = false;
-  page.video.currentTime = 1900;
-  page.video.seeking = true;
-  dispatchVideoEvent(page,'seeking');
-  page.video.seeking = false;
-  dispatchVideoEvent(page,'seeked');
-  page.video.currentTime = 1929;
+  const page = runWatchPage(1, undefined, {duration:200,nextEpisodeUrl});
+  clickCenterPlay(page);
+  page.video.currentTime = 129;
   dispatchVideoEvent(page,'timeupdate');
   assert.deepEqual(page.navigation, []);
 
   page.clock.now += 2000;
-  page.video.currentTime = 1930;
+  page.video.currentTime = 130;
   dispatchVideoEvent(page,'timeupdate');
   assert.deepEqual(page.navigation, []);
 
-  for (let second = 0; second < 54; second++) {
+  for (let second = 0; second < 39; second++) {
     page.video.currentTime += 1;
     dispatchVideoEvent(page,'timeupdate');
   }
@@ -681,6 +677,7 @@ test('a pending opening ad delays episode advancement until the episode ends', (
   page.video.currentTime += 1;
   dispatchVideoEvent(page,'timeupdate');
   assert.ok(getAdBreak(page));
+  assert.match(getAdBreak(page).children[1].textContent, /5 ثوانٍ$/);
   assert.deepEqual(page.navigation, []);
 
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
@@ -688,7 +685,7 @@ test('a pending opening ad delays episode advancement until the episode ends', (
   assert.equal(getAdBreak(page), undefined);
   assert.deepEqual(page.navigation, []);
 
-  page.video.currentTime = 2000;
+  page.video.currentTime = 200;
   page.video.ended = true;
   dispatchVideoEvent(page,'ended');
   assert.deepEqual(page.navigation, [nextEpisodeUrl]);
@@ -735,7 +732,7 @@ test('paused time does not count toward the next ad break', () => {
   assert.ok(getAdBreak(page));
 });
 
-test('a manual seek past the ad mark does not trigger immediately', () => {
+test('a manual seek across the scheduled ad mark triggers one ad immediately', () => {
   const page = runWatchPage(1);
   clickCenterPlay(page);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
@@ -744,12 +741,19 @@ test('a manual seek past the ad mark does not trigger immediately', () => {
   dispatchVideoEvent(page,'seeking');
   page.video.seeking = false;
   dispatchVideoEvent(page,'seeked');
-  tick();
-  assert.equal(getAdBreak(page), undefined);
+  const overlay = getAdBreak(page);
+  assert.ok(overlay);
+  assert.match(overlay.children[1].textContent, /45 ثوانٍ$/);
+  assert.equal(page.video.paused, true);
 
-  page.video.currentTime += 600;
+  for (let second = 0; second < 45; second++) tick();
+  assert.equal(getAdBreak(page), undefined);
+  assert.equal(page.video.currentTime, 600);
+  assert.equal(page.video.paused, false);
+
+  page.video.currentTime += 1;
   dispatchVideoEvent(page,'timeupdate');
-  assert.ok(getAdBreak(page));
+  assert.equal(getAdBreak(page), undefined);
 });
 
 test('non-immersive ads remain constrained to the video player', () => {
