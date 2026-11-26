@@ -388,7 +388,7 @@ test('episodes wait for an explicit play click before filling the screen', () =>
   assert.equal(page.messages.some(({message}) => message.type === 'player-immersive' && message.active === true), false);
 });
 
-test('the center play click requests fullscreen, skips the intro, and shows the five-second ad before playback', () => {
+test('the center play click requests fullscreen, skips the intro, and shows the fifteen-second ad before playback', () => {
   const page = runWatchPage(1, undefined, {nativeFullscreen:true,orientation:{}});
   assert.equal(page.video.playCalls, 0);
   clickCenterPlay(page);
@@ -401,12 +401,12 @@ test('the center play click requests fullscreen, skips the intro, and shows the 
 
   const overlay = getAdBreak(page);
   assert.ok(overlay);
-  assert.match(overlay.children[1].textContent, /5 ثوانٍ$/);
+  assert.match(overlay.children[1].textContent, /15 ثوانٍ$/);
   assert.equal(page.player.children.includes(overlay), true);
   assert.equal(page.video.paused, true);
 
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
-  for (let second = 0; second < 5; second++) tick();
+  for (let second = 0; second < 15; second++) tick();
   assert.equal(getAdBreak(page), undefined);
   assert.equal(page.video.playCalls, 1);
   assert.equal(page.video.paused, false);
@@ -426,7 +426,7 @@ test('a click before metadata seeks as soon as the adaptive stream exposes durat
   assert.equal(page.actions.at(-1), 'seek');
 
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
-  for (let second = 0; second < 5; second++) tick();
+  for (let second = 0; second < 15; second++) tick();
   assert.equal(page.video.playCalls, 1);
   assert.equal(page.video.paused, false);
 });
@@ -513,7 +513,7 @@ test('only the sponsored fullscreen link can open an external popup', () => {
   assert.equal(page.window.open('https://unapproved.example/','_blank'), null);
 });
 
-test('skipping the intro cannot bypass the five-second ad before the episode', () => {
+test('skipping the intro cannot bypass the fifteen-second ad before the episode', () => {
   const page = runWatchPage(1);
   clickCenterPlay(page);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
@@ -522,7 +522,7 @@ test('skipping the intro cannot bypass the five-second ad before the episode', (
   assert.equal(page.video.paused, true);
   const overlay = getAdBreak(page);
   assert.ok(overlay);
-  assert.match(overlay.children[1].textContent, /5 ثوانٍ$/);
+  assert.match(overlay.children[1].textContent, /15 ثوانٍ$/);
   assert.equal(page.player.children.includes(overlay), true);
 
   page.video.seeking = true;
@@ -533,7 +533,7 @@ test('skipping the intro cannot bypass the five-second ad before the episode', (
   assert.equal(page.video.paused, true);
   assert.ok(getAdBreak(page));
 
-  for (let second = 0; second < 4; second++) tick();
+  for (let second = 0; second < 14; second++) tick();
   assert.ok(getAdBreak(page));
   assert.match(overlay.children[1].textContent, /1 ثوانٍ$/);
   tick();
@@ -549,8 +549,8 @@ test('fullscreen ad pauses at the exact position and resumes after forty-five se
 
   const openingOverlay = getAdBreak(page);
   assert.ok(openingOverlay);
-  assert.match(openingOverlay.children[1].textContent, /5 ثوانٍ$/);
-  for (let second = 0; second < 5; second++) tick();
+  assert.match(openingOverlay.children[1].textContent, /15 ثوانٍ$/);
+  for (let second = 0; second < 15; second++) tick();
   assert.equal(getAdBreak(page), undefined);
   assert.equal(page.video.playCalls, 1);
 
@@ -669,7 +669,7 @@ test('the opening ad runs once and never interrupts the episode again', () => {
   const page = runWatchPage(1);
   clickCenterPlay(page);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
-  for (let second = 0; second < 5; second++) tick();
+  for (let second = 0; second < 15; second++) tick();
   assert.equal(getAdBreak(page), undefined);
   assert.equal(page.video.paused, false);
 
@@ -709,7 +709,7 @@ test('paused time does not count toward the next ad break', () => {
   const page = runWatchPage(1);
   clickCenterPlay(page);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
-  for (let second = 0; second < 5; second++) tick();
+  for (let second = 0; second < 15; second++) tick();
   assert.equal(page.video.paused, false);
 
   page.video.paused = true;
@@ -732,7 +732,7 @@ test('a manual seek across the scheduled ad mark triggers one ad immediately', (
   const page = runWatchPage(1);
   clickCenterPlay(page);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
-  for (let second = 0; second < 5; second++) tick();
+  for (let second = 0; second < 15; second++) tick();
   assert.equal(page.video.playCalls, 1);
 
   page.video.currentTime = 600;
@@ -760,7 +760,7 @@ test('non-immersive ads remain constrained to the video player', () => {
   const page = runWatchPage(1);
   clickCenterPlay(page);
   const tick = page.intervals.find(timer => timer.delay === 1000).callback;
-  for (let second = 0; second < 5; second++) tick();
+  for (let second = 0; second < 15; second++) tick();
   clickFullscreen(page);
   assert.equal(page.player.classList.contains('akwam-immersive-player'), false);
   page.video.currentTime = 599;

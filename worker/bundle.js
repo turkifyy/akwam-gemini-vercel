@@ -266,7 +266,7 @@ const bootstrapScript = String.raw`(() => {
     let nativeFullscreenPlayer = null;
     const adBreakIntervalSeconds = 10 * 60;
     const adBreakDurationSeconds = 45;
-    const openingAdDurationSeconds = 5;
+    const openingAdDurationSeconds = 15;
     document.addEventListener('click', event => {
       const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
       const link = target?.closest?.('a[target="_blank"]');
@@ -670,7 +670,7 @@ const bootstrapScript = String.raw`(() => {
         adFrame.src = adBridgeUrl || adLinkUrl;
       }
 
-      // The five-second preroll is shown once, before the episode itself starts, so
+      // The fifteen-second preroll is shown once, before the episode itself starts, so
       // skipping the intro can never bypass it.
       function showOpeningAd() {
         if (openingAdShown || adActive) return false;
