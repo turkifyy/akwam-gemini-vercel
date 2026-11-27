@@ -39,25 +39,17 @@ async function handleAdBridge(request, env) {
   }
   const creative = request.method === 'HEAD' ? AD_FALLBACK : await resolveAdCreative(env);
   const parentOrigins = [...allowedParents(env)].join(' ');
-  const frameAncestors = "'self'" + (parentOrigins ? ' ' + parentOrigins : '');
-  const frameable = request.method !== 'HEAD' && creative.frameable === true;
   const headers = new Headers({
     'Content-Type':'text/html; charset=utf-8',
     'Cache-Control':'no-store',
     'Referrer-Policy':'strict-origin-when-cross-origin',
     'X-Content-Type-Options':'nosniff',
-    'X-Ad-Mode':frameable ? 'live' : 'creative',
-    'Content-Security-Policy':(frameable
-      ? "default-src 'none'; frame-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors " + frameAncestors
-      : "default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'; frame-ancestors " + frameAncestors)
+    'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'" + (parentOrigins ? ' ' + parentOrigins : '')
   });
-  const html = frameable ? renderLiveAdFrame() : renderCreativeAdFrame(creative);
-  return new Response(request.method === 'HEAD' ? null : html, {status:200, headers});
+  return new Response(request.method === 'HEAD' ? null : renderCreativeAdFrame(creative), {status:200, headers});
 }
 
-const AD_LINK_ORIGIN = (() => { try { return new URL(AD_LINK_URL).origin; } catch (_) { return ''; } })();
 const AD_FALLBACK = {
-  frameable:false,
   title:'عرض مميز من رعاة الموقع',
   description:'اضغط على الإعلان للاطلاع على العرض والرسوم والشروط قبل زيارة موقع المعلن.',
   image:'',
@@ -119,7 +111,6 @@ async function probeAdCreative() {
   catch (_) {}
   const meta = adMetaFromHtml(html, finalUrl);
   return {
-    frameable: adFrameIsEmbeddable(response.headers, html, finalUrl),
     title: meta.title || AD_FALLBACK.title,
     description: meta.description || AD_FALLBACK.description,
     image: meta.image || '',
@@ -128,34 +119,7 @@ async function probeAdCreative() {
   };
 }
 
-function adFrameIsEmbeddable(headers, html, finalUrl) {
-  if (!isFrameable(headers)) return false;
-  let finalOrigin = '';
-  try { finalOrigin = new URL(finalUrl).origin; }
-  catch (_) { return false; }
-  // Redirect ad zones hand the browser a different destination than the one the
-  // probe sees, and that destination usually refuses framing. Only embed when the
-  // ad host itself answered with a real document, so a blocked frame can never
-  // replace the ad area with a browser error page.
-  if (finalOrigin !== AD_LINK_ORIGIN) return false;
-  const source = String(html || '');
-  if (source.length < 1200) return false;
-  if (!/<body[\s>]/i.test(source)) return false;
-  return /<title[^>]*>\s*\S/i.test(source);
-}
 
-function isFrameable(headers) {
-  if (!headers) return false;
-  const xfo = String(headers.get('x-frame-options') || '').trim().toLowerCase();
-  if (xfo && xfo !== 'allowall') return false;
-  const csp = String(headers.get('content-security-policy') || '').toLowerCase();
-  const ancestors = csp.match(/frame-ancestors([^;]*)/);
-  if (ancestors) {
-    const value = ancestors[1].trim();
-    if (value && value !== '*' && !/(^|\s)(?:'self'|https?:|\*)/.test(value)) return false;
-  }
-  return true;
-}
 
 function adMetaFromHtml(html, baseUrl) {
   const head = String(html || '').slice(0, AD_PROBE_HTML_LIMIT);
@@ -225,23 +189,6 @@ function adEscapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function renderLiveAdFrame() {
-  return `<!doctype html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>إعلان ممول</title>
-  <style>
-    html,body{width:100%;height:100%;margin:0;background:#070a12;overflow:hidden}
-    iframe{display:block;width:100%;height:100%;border:0;background:#070a12}
-  </style>
-</head>
-<body>
-  <iframe src="${adEscapeHtml(AD_LINK_URL)}" title="إعلان ممول" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>
-</body>
-</html>`;
-}
 
 function renderCreativeAdFrame(creative) {
   const ad = {...AD_FALLBACK, ...(creative || {})};

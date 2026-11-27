@@ -345,7 +345,6 @@ test('video ad bridge serves a secure first-party page with an explicit sponsor 
   assert.equal(response.headers.get('Location'), null);
   assert.equal(response.headers.get('Cache-Control'), 'no-store');
   assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
-  assert.equal(response.headers.get('X-Ad-Mode'), 'creative');
   assert.equal(response.headers.get('Content-Security-Policy'), "default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self' https://turkifyseries.vercel.app https://akwam-gemini-vercel.vercel.app");
   assert.doesNotMatch(response.headers.get('Content-Security-Policy'), /attacker\.example/);
   const html = await response.text();
@@ -363,24 +362,6 @@ test('video ad bridge serves a secure first-party page with an explicit sponsor 
   assert.equal(rejected.headers.get('Allow'), 'GET, HEAD');
 });
 
-test('the ad frame embeds the sponsor live when its landing page allows framing', async () => {
-  const originalFetch = globalThis.fetch;
-  const livePage = '<html><head><title>Bank offers</title><meta property="og:title" content="Bank offers"><meta property="og:image" content="/hero.jpg"></head><body><p>' + 'offer details '.repeat(120) + '</p></body></html>';
-  globalThis.fetch = async () => new Response(livePage, {
-    status:200,
-    headers:{'Content-Type':'text/html'}
-  });
-  try {
-    const response = await worker.fetch(new Request(workerUrl + '/__bridge/ad'), {ALLOWED_PARENT_ORIGINS:'https://turkifyseries.vercel.app'});
-    assert.equal(response.headers.get('X-Ad-Mode'), 'live');
-    assert.match(response.headers.get('Content-Security-Policy'), /frame-src https:/);
-    const html = await response.text();
-    assert.match(html, /<iframe src="https:\/\/asiafilm\.org\/4\/397db7f27bcb1e058e7ac9ba2a034a28"/);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
 test('the ad frame renders the live advertiser preview when the landing page refuses framing', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response('<html><head><title>Compare bank offers</title><meta property="og:title" content="Compare bank offers"><meta property="og:description" content="Fees and terms"><meta property="og:image" content="https://cdn.example/hero.jpg"><meta property="og:site_name" content="Example Bank"></head></html>', {
@@ -389,8 +370,7 @@ test('the ad frame renders the live advertiser preview when the landing page ref
   });
   try {
     const response = await worker.fetch(new Request(workerUrl + '/__bridge/ad'), {ALLOWED_PARENT_ORIGINS:'https://turkifyseries.vercel.app'});
-    assert.equal(response.headers.get('X-Ad-Mode'), 'creative');
-    const html = await response.text();
+      const html = await response.text();
     assert.match(html, /Compare bank offers/);
     assert.match(html, /Fees and terms/);
     assert.match(html, /https:\/\/cdn\.example\/hero\.jpg/);
