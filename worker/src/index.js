@@ -33,19 +33,209 @@ export default {
   }
 };
 
-function handleAdBridge(request, env) {
+async function handleAdBridge(request, env) {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return new Response('Method not allowed', {status:405, headers:{Allow:'GET, HEAD','Cache-Control':'no-store'}});
   }
+  const creative = request.method === 'HEAD' ? AD_FALLBACK : await resolveAdCreative(env);
   const parentOrigins = [...allowedParents(env)].join(' ');
+  const frameAncestors = "'self'" + (parentOrigins ? ' ' + parentOrigins : '');
+  const frameable = request.method !== 'HEAD' && creative.frameable === true;
   const headers = new Headers({
     'Content-Type':'text/html; charset=utf-8',
     'Cache-Control':'no-store',
     'Referrer-Policy':'strict-origin-when-cross-origin',
     'X-Content-Type-Options':'nosniff',
-    'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'" + (parentOrigins ? ' ' + parentOrigins : '')
+    'X-Ad-Mode':frameable ? 'live' : 'creative',
+    'Content-Security-Policy':(frameable
+      ? "default-src 'none'; frame-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors " + frameAncestors
+      : "default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'; frame-ancestors " + frameAncestors)
   });
-  const html = `<!doctype html>
+  const html = frameable ? renderLiveAdFrame() : renderCreativeAdFrame(creative);
+  return new Response(request.method === 'HEAD' ? null : html, {status:200, headers});
+}
+
+const AD_FALLBACK = {
+  frameable:false,
+  title:'عرض مميز من رعاة الموقع',
+  description:'اضغط على الإعلان للاطلاع على العرض والرسوم والشروط قبل زيارة موقع المعلن.',
+  image:'',
+  brand:'إعلان ممول',
+  host:''
+};
+const AD_PROBE_TIMEOUT_MS = 4000;
+const AD_PROBE_TTL_SECONDS = 600;
+const AD_PROBE_HTML_LIMIT = 350000;
+const AD_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
+async function resolveAdCreative(env) {
+  if (String(env?.AD_PREVIEW || '').toLowerCase() === 'off') return {...AD_FALLBACK};
+  const cache = typeof caches !== 'undefined' && caches.default ? caches.default : null;
+  const key = new Request('https://ad-preview.invalid/' + encodeURIComponent(AD_LINK_URL));
+  if (cache) {
+    try {
+      const hit = await cache.match(key);
+      if (hit) return await hit.json();
+    } catch (_) {}
+  }
+  const creative = await probeAdCreative();
+  if (cache) {
+    try {
+      await cache.put(key, new Response(JSON.stringify(creative), {
+        headers:{'Content-Type':'application/json','Cache-Control':'public, max-age=' + AD_PROBE_TTL_SECONDS}
+      }));
+    } catch (_) {}
+  }
+  return creative;
+}
+
+async function probeAdCreative() {
+  let response;
+  try {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), AD_PROBE_TIMEOUT_MS) : null;
+    try {
+      response = await fetch(AD_LINK_URL, {
+        redirect:'follow',
+        headers:{
+          'User-Agent':AD_UA,
+          'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language':'ar,en-US;q=0.8,en;q=0.7',
+          'Upgrade-Insecure-Requests':'1'
+        },
+        signal:controller ? controller.signal : undefined
+      });
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  } catch (_) {
+    return {...AD_FALLBACK};
+  }
+  if (!response || !response.ok) return {...AD_FALLBACK};
+  const finalUrl = response.url || AD_LINK_URL;
+  const frameable = isFrameable(response.headers);
+  let html = '';
+  try { html = (await response.text()).slice(0, AD_PROBE_HTML_LIMIT); }
+  catch (_) {}
+  const meta = adMetaFromHtml(html, finalUrl);
+  return {
+    frameable,
+    title: meta.title || AD_FALLBACK.title,
+    description: meta.description || AD_FALLBACK.description,
+    image: meta.image || '',
+    brand: meta.brand || AD_FALLBACK.brand,
+    host: adHostLabel(finalUrl)
+  };
+}
+
+function isFrameable(headers) {
+  if (!headers) return false;
+  const xfo = String(headers.get('x-frame-options') || '').trim().toLowerCase();
+  if (xfo && xfo !== 'allowall') return false;
+  const csp = String(headers.get('content-security-policy') || '').toLowerCase();
+  const ancestors = csp.match(/frame-ancestors([^;]*)/);
+  if (ancestors) {
+    const value = ancestors[1].trim();
+    if (value && value !== '*' && !/(^|\s)(?:'self'|https?:|\*)/.test(value)) return false;
+  }
+  return true;
+}
+
+function adMetaFromHtml(html, baseUrl) {
+  const head = String(html || '').slice(0, AD_PROBE_HTML_LIMIT);
+  const grab = (...names) => {
+    for (const name of names) {
+      const attr = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const patterns = [
+        new RegExp('<meta[^>]+(?:property|name)=["\']' + attr + '["\'][^>]*content=["\']([^"\']*)["\']', 'i'),
+        new RegExp('<meta[^>]+content=["\']([^"\']*)["\'][^>]*(?:property|name)=["\']' + attr + '["\']', 'i')
+      ];
+      for (const pattern of patterns) {
+        const match = head.match(pattern);
+        if (match && String(match[1]).trim()) return adText(match[1]);
+      }
+    }
+    return '';
+  };
+  const titleTag = (head.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '';
+  const rawImage = grab('og:image:secure_url','og:image','twitter:image','twitter:image:src');
+  return {
+    title: grab('og:title','twitter:title') || adText(titleTag),
+    description: grab('og:description','twitter:description','description'),
+    image: absoluteAdImage(rawImage, baseUrl),
+    brand: grab('og:site_name','application-name') || adHostLabel(baseUrl)
+  };
+}
+
+function adText(value) {
+  return String(value || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180);
+}
+
+function absoluteAdImage(value, baseUrl) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw, baseUrl || AD_LINK_URL);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function adHostLabel(rawUrl) {
+  try {
+    return new URL(rawUrl).hostname.replace(/^www\./, '');
+  } catch (_) {
+    return '';
+  }
+}
+
+function adEscapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderLiveAdFrame() {
+  return `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>إعلان ممول</title>
+  <style>
+    html,body{width:100%;height:100%;margin:0;background:#070a12;overflow:hidden}
+    iframe{display:block;width:100%;height:100%;border:0;background:#070a12}
+  </style>
+</head>
+<body>
+  <iframe src="${adEscapeHtml(AD_LINK_URL)}" title="إعلان ممول" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+</body>
+</html>`;
+}
+
+function renderCreativeAdFrame(creative) {
+  const ad = {...AD_FALLBACK, ...(creative || {})};
+  const image = absoluteAdImage(ad.image, AD_LINK_URL);
+  const brand = adEscapeHtml(ad.brand || ad.host || 'إعلان ممول');
+  const host = adEscapeHtml(ad.host || '');
+  const initial = adEscapeHtml(String(ad.brand || ad.host || 'AD').trim().charAt(0).toUpperCase() || 'A');
+  const backdropStyle = image ? ` style="background-image:url('${adEscapeHtml(image)}')"` : '';
+  const posterStyle = image ? ` style="background-image:url('${adEscapeHtml(image)}')"` : '';
+  return `<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
@@ -53,29 +243,50 @@ function handleAdBridge(request, env) {
   <title>إعلان ممول</title>
   <style>
     *{box-sizing:border-box}
-    body{display:grid;min-height:100vh;margin:0;padding:24px;place-items:center;background:radial-gradient(ellipse at 50% 0%,#1a2943,#080b12 72%);color:#f8fafc;font:16px/1.7 system-ui,sans-serif}
-    main{width:min(100%,680px);padding:clamp(24px,6vw,52px);border:1px solid #ffffff24;border-radius:22px;background:#101827e8;box-shadow:0 24px 80px #0008;text-align:center}
-    .label{display:inline-block;padding:4px 12px;border:1px solid #94a3b833;border-radius:999px;color:#cbd5e1;font-size:13px}
-    h1{margin:20px 0 8px;font-size:clamp(24px,5vw,38px);line-height:1.25}
-    p{max-width:46ch;margin:0 auto 26px;color:#cbd5e1}
-    a{display:inline-flex;min-height:48px;align-items:center;justify-content:center;padding:10px 22px;border-radius:12px;background:#f59e0b;color:#111827;font-weight:750;text-decoration:none;transition:background .18s ease,transform .18s ease}
-    a:hover{transform:translateY(-1px);background:#fbbf24}
-    a:focus-visible{outline:3px solid #fff;outline-offset:4px}
-    small{display:block;margin-top:18px;color:#94a3b8;font-size:12px}
-    @media(prefers-reduced-motion:reduce){a{transition:none}}
+    html,body{width:100%;height:100%;margin:0}
+    body{background:#070a12;font:16px/1.55 system-ui,-apple-system,'Segoe UI',sans-serif;color:#f8fafc;overflow:hidden}
+    .ad{position:relative;display:block;width:100%;height:100%;overflow:hidden;text-decoration:none;color:inherit;isolation:isolate;background:radial-gradient(120% 90% at 78% 8%,#1b2b47,#0a101c 58%,#060910)}
+    .backdrop{position:absolute;inset:-6%;background-position:center;background-size:cover;filter:blur(26px) saturate(1.25);opacity:.42;transform:scale(1.08)}
+    .veil{position:absolute;inset:0;background:linear-gradient(90deg,#05070dc9 0%,#05070d80 52%,#05070d3d 100%),linear-gradient(0deg,#05070dd9,transparent 62%)}
+    .grid{position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.78fr);align-items:center;gap:clamp(14px,3vw,36px);padding:clamp(16px,4vw,44px)}
+    .copy{display:flex;flex-direction:column;align-items:flex-start;gap:clamp(6px,1.4vh,12px);min-width:0}
+    .chip{display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border:1px solid #ffffff2b;border-radius:999px;background:#080c14b8;color:#e2e8f0;font-size:clamp(10px,1.6vw,13px);font-weight:650}
+    .chip::before{content:'';width:6px;height:6px;border-radius:50%;background:#a3e635;box-shadow:0 0 10px #a3e635}
+    .brand{display:flex;align-items:center;gap:8px;color:#e5eaf2;font-size:clamp(11px,1.7vw,14px);font-weight:650;opacity:.94;min-width:0}
+    .brand span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .logo{flex:none;display:grid;place-items:center;width:clamp(24px,3.4vw,32px);height:clamp(24px,3.4vw,32px);border-radius:8px;background:#f8fafc;color:#0b1220;font-weight:800;font-size:clamp(12px,1.8vw,16px)}
+    h1{margin:0;font-size:clamp(19px,3.9vw,42px);line-height:1.18;font-weight:800;letter-spacing:-.01em;text-shadow:0 2px 20px #000a;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+    p{margin:0;max-width:52ch;color:#c9d4e3;font-size:clamp(12px,1.85vw,17px);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .cta{display:inline-flex;align-items:center;justify-content:center;gap:8px;margin-top:clamp(2px,1vh,8px);min-height:clamp(38px,5.6vw,52px);padding:0 clamp(16px,2.6vw,30px);border-radius:12px;background:#a3e635;color:#10160a;font-size:clamp(13px,1.9vw,17px);font-weight:800;box-shadow:0 14px 36px #0008,0 0 0 1px #ffffff1f inset;transition:background .16s ease,transform .16s ease}
+    .cta svg{width:1.05em;height:1.05em;stroke:currentColor;stroke-width:2.3;fill:none;stroke-linecap:round;stroke-linejoin:round}
+    .hint{color:#93a1b5;font-size:clamp(9px,1.3vw,12px)}
+    .poster{justify-self:center;width:100%;max-height:76%;aspect-ratio:4/3;border-radius:16px;border:1px solid #ffffff1f;background-color:#0d1524d9;background-position:center;background-size:contain;background-repeat:no-repeat;box-shadow:0 24px 60px #0009}
+    .monogram{display:grid;place-items:center;width:100%;height:100%;font-size:clamp(40px,9vw,110px);font-weight:900;color:#dbeafe;background:radial-gradient(circle at 40% 30%,#22324f,#0c1422)}
+    .ad:hover .cta{background:#bef264;transform:translateY(-1px)}
+    .ad:focus-visible{outline:3px solid #fff;outline-offset:-6px}
+    @media(max-width:640px){.grid{grid-template-columns:1fr;padding:clamp(14px,5vw,26px)}.poster{display:none}p{display:none}}
+    @media(max-height:380px){.grid{padding:12px 18px}h1{-webkit-line-clamp:2}.poster{max-height:88%}p{display:none}}
+    @media(prefers-reduced-motion:reduce){*{transition:none!important}}
   </style>
 </head>
 <body>
-  <main>
-    <span class="label">إعلان ممول</span>
-    <h1>شكرًا لدعمك</h1>
-    <p>سيستأنف الفيديو تلقائيًا. إذا رغبت بزيارة موقع المعلن، افتحه في تبويب جديد.</p>
-    <a href="${AD_LINK_URL}" target="_blank" rel="noopener noreferrer nofollow sponsored">زيارة المعلن</a>
-    <small>سيبقى الفيديو محميًا داخل المشغل، ولن تتم مغادرة الصفحة تلقائيًا.</small>
-  </main>
+  <a class="ad" href="${adEscapeHtml(AD_LINK_URL)}" target="_blank" rel="noopener noreferrer nofollow sponsored" aria-label="${adEscapeHtml(ad.title)}">
+    <span class="backdrop"${backdropStyle}></span>
+    <span class="veil"></span>
+    <span class="grid">
+      <span class="copy">
+        <span class="chip">إعلان ممول</span>
+        <span class="brand"><span class="logo">${initial}</span><span>${brand}</span></span>
+        <h1>${adEscapeHtml(ad.title)}</h1>
+        <p>${adEscapeHtml(ad.description)}</p>
+        <span class="cta">زيارة الإعلان<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M9 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3"/></svg></span>
+        <span class="hint">${host ? 'المعلن: ' + host : 'اضغط للاطلاع على تفاصيل العرض'}</span>
+      </span>
+      <span class="poster"${posterStyle}>${image ? '' : '<span class="monogram">' + initial + '</span>'}</span>
+    </span>
+  </a>
 </body>
 </html>`;
-  return new Response(request.method === 'HEAD' ? null : html, {status:200, headers});
 }
 
 function allowedParents(env) {
