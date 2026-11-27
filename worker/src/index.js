@@ -58,7 +58,7 @@ const AD_FALLBACK = {
   brand:'',
   host:''
 };
-const AD_PROBE_TIMEOUT_MS = 4000;
+const AD_PROBE_TIMEOUT_MS = 2500;
 const AD_PROBE_TTL_SECONDS = 600;
 const AD_PREVIEW_CACHE_VERSION = '2026-11-27-4';
 const AD_PROBE_HTML_LIMIT = 350000;
