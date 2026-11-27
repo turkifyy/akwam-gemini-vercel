@@ -338,18 +338,20 @@ test('injected scripts bypass stale browser caches', async () => {
 });
 
 test('video ad bridge serves a secure first-party page with an explicit sponsor link', async () => {
-  const env = {ALLOWED_PARENT_ORIGINS:'https://turkifyseries.vercel.app,https://akwam-gemini-vercel.vercel.app'};
+  const env = {ALLOWED_PARENT_ORIGINS:'https://turkifyseries.vercel.app,https://akwam-gemini-vercel.vercel.app', AD_PREVIEW:'off'};
   const response = await worker.fetch(new Request(workerUrl + '/__bridge/ad?url=https://attacker.example'), env);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('Content-Type'), 'text/html; charset=utf-8');
   assert.equal(response.headers.get('Location'), null);
   assert.equal(response.headers.get('Cache-Control'), 'no-store');
   assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
-  assert.equal(response.headers.get('Content-Security-Policy'), "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self' https://turkifyseries.vercel.app https://akwam-gemini-vercel.vercel.app");
+  assert.equal(response.headers.get('X-Ad-Mode'), 'creative');
+  assert.equal(response.headers.get('Content-Security-Policy'), "default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self' https://turkifyseries.vercel.app https://akwam-gemini-vercel.vercel.app");
   assert.doesNotMatch(response.headers.get('Content-Security-Policy'), /attacker\.example/);
   const html = await response.text();
   assert.match(html, /lang="ar" dir="rtl"/);
   assert.match(html, /href="https:\/\/asiafilm\.org\/4\/397db7f27bcb1e058e7ac9ba2a034a28" target="_blank" rel="noopener noreferrer nofollow sponsored"/);
+  assert.match(html, /إعلان ممول/);
   assert.doesNotMatch(html, /attacker\.example/);
 
   const head = await worker.fetch(new Request(workerUrl + '/__bridge/ad', {method:'HEAD'}), env);
@@ -361,11 +363,48 @@ test('video ad bridge serves a secure first-party page with an explicit sponsor 
   assert.equal(rejected.headers.get('Allow'), 'GET, HEAD');
 });
 
+test('the ad frame embeds the sponsor live when its landing page allows framing', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('<html><head><meta property="og:title" content="Bank offers"><meta property="og:image" content="/hero.jpg"></head><body></body></html>', {
+    status:200,
+    headers:{'Content-Type':'text/html'}
+  });
+  try {
+    const response = await worker.fetch(new Request(workerUrl + '/__bridge/ad'), {ALLOWED_PARENT_ORIGINS:'https://turkifyseries.vercel.app'});
+    assert.equal(response.headers.get('X-Ad-Mode'), 'live');
+    assert.match(response.headers.get('Content-Security-Policy'), /frame-src https:/);
+    const html = await response.text();
+    assert.match(html, /<iframe src="https:\/\/asiafilm\.org\/4\/397db7f27bcb1e058e7ac9ba2a034a28"/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('the ad frame renders the live advertiser preview when the landing page refuses framing', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('<html><head><title>Compare bank offers</title><meta property="og:title" content="Compare bank offers"><meta property="og:description" content="Fees and terms"><meta property="og:image" content="https://cdn.example/hero.jpg"><meta property="og:site_name" content="Example Bank"></head></html>', {
+    status:200,
+    headers:{'Content-Type':'text/html','X-Frame-Options':'DENY'}
+  });
+  try {
+    const response = await worker.fetch(new Request(workerUrl + '/__bridge/ad'), {ALLOWED_PARENT_ORIGINS:'https://turkifyseries.vercel.app'});
+    assert.equal(response.headers.get('X-Ad-Mode'), 'creative');
+    const html = await response.text();
+    assert.match(html, /Compare bank offers/);
+    assert.match(html, /Fees and terms/);
+    assert.match(html, /https:\/\/cdn\.example\/hero\.jpg/);
+    assert.match(html, /Example Bank/);
+    assert.doesNotMatch(html, /<iframe/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('the player ad iframe is routed through the Worker bridge', async () => {
   const bootstrap = await readFile(new URL('../src/bootstrap.js', import.meta.url), 'utf8');
   const source = await readFile(new URL('../src/index.js', import.meta.url), 'utf8');
   assert.match(bootstrap, /adFrame\.src = adBridgeUrl/);
-  assert.match(bootstrap, /adFrame\.setAttribute\('sandbox','allow-popups allow-popups-to-escape-sandbox'\)/);
+  assert.match(bootstrap, /adFrame\.setAttribute\('sandbox','allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox'\)/);
   assert.match(bootstrap, /new URL\('\/__bridge\/ad', location\.origin\)\.href/);
   assert.match(source, /adBridgeUrl:workerOrigin \+ '\/__bridge\/ad'/);
 });
