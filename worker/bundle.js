@@ -1761,13 +1761,14 @@ const AD_FALLBACK = {
 };
 const AD_PROBE_TIMEOUT_MS = 4000;
 const AD_PROBE_TTL_SECONDS = 600;
+const AD_PREVIEW_CACHE_VERSION = '2026-11-27-3';
 const AD_PROBE_HTML_LIMIT = 350000;
 const AD_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 async function resolveAdCreative(env) {
   if (String(env?.AD_PREVIEW || '').toLowerCase() === 'off') return {...AD_FALLBACK};
   const cache = typeof caches !== 'undefined' && caches.default ? caches.default : null;
-  const key = new Request('https://ad-preview.invalid/' + encodeURIComponent(AD_LINK_URL));
+  const key = new Request('https://ad-preview.invalid/' + AD_PREVIEW_CACHE_VERSION + '/' + encodeURIComponent(AD_LINK_URL));
   if (cache) {
     try {
       const hit = await cache.match(key);
