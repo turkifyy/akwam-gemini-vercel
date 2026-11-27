@@ -28,33 +28,12 @@ export default {
     if (url.pathname === '/__bridge/bootstrap.js') return javascript(bootstrapScript);
     if (url.pathname === '/__bridge/translator.js') return javascript(translatorScript);
     if (url.pathname === '/__bridge/ad') return handleAdBridge(request, env);
-    if (url.pathname === '/__bridge/ad-meta') return handleAdMeta(request, env);
-    if (url.pathname === '/__bridge/ad-raw') return handleAdRaw(request, env);
     if (url.pathname === '/site' || url.pathname.startsWith('/site/')) return proxyAkwam(request, env, url);
     return json({error:'Not found'}, 404);
   }
 };
 
-async function handleAdRaw(request, env) {
-  if (request.method !== 'GET') return new Response('Method not allowed', {status:405});
-  try {
-    const res = await fetch(AD_LINK_URL, {redirect:'follow', headers:{'User-Agent':AD_UA,'Accept':'text/html,application/xhtml+xml','Accept-Language':'ar,en;q=0.8'}});
-    const text = await res.text();
-    return new Response(text, {headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
-  } catch (error) {
-    return new Response('error: ' + error, {headers:{'Content-Type':'text/plain'}});
-  }
-}
 
-async function handleAdMeta(request, env) {
-  if (request.method !== 'GET') {
-    return new Response('Method not allowed', {status:405, headers:{Allow:'GET','Cache-Control':'no-store'}});
-  }
-  const creative = await resolveAdCreative(env);
-  return new Response(JSON.stringify(creative), {
-    headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}
-  });
-}
 
 async function handleAdBridge(request, env) {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -73,10 +52,10 @@ async function handleAdBridge(request, env) {
 }
 
 const AD_FALLBACK = {
-  title:'عرض مميز من رعاة الموقع',
-  description:'اضغط على الإعلان للاطلاع على العرض والرسوم والشروط قبل زيارة موقع المعلن.',
+  title:'شاهد عرض الراعي',
+  description:'افتح عرض المعلن في تبويب جديد، وسيستأنف الفيديو تلقائيًا بعد انتهاء الإعلان.',
   image:'',
-  brand:'إعلان ممول',
+  brand:'',
   host:''
 };
 const AD_PROBE_TIMEOUT_MS = 4000;
@@ -87,7 +66,7 @@ const AD_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHT
 async function resolveAdCreative(env) {
   if (String(env?.AD_PREVIEW || '').toLowerCase() === 'off') return {...AD_FALLBACK};
   const cache = typeof caches !== 'undefined' && caches.default ? caches.default : null;
-  const key = new Request('https://ad-preview.invalid/v2/' + encodeURIComponent(AD_LINK_URL));
+  const key = new Request('https://ad-preview.invalid/' + encodeURIComponent(AD_LINK_URL));
   if (cache) {
     try {
       const hit = await cache.match(key);
@@ -134,7 +113,6 @@ async function probeAdCreative() {
   catch (_) {}
   const meta = adMetaFromHtml(html, finalUrl);
   return {
-    debug:{status:response.status, bytes:html.length, finalUrl, titleTag:(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]||'', ogCount:(html.match(/<meta/gi)||[]).length},
     title: meta.title || AD_FALLBACK.title,
     description: meta.description || AD_FALLBACK.description,
     image: meta.image || '',
@@ -217,9 +195,11 @@ function adEscapeHtml(value) {
 function renderCreativeAdFrame(creative) {
   const ad = {...AD_FALLBACK, ...(creative || {})};
   const image = absoluteAdImage(ad.image, AD_LINK_URL);
-  const brand = adEscapeHtml(ad.brand || ad.host || 'إعلان ممول');
+  const brand = adEscapeHtml(ad.brand || '');
+  const hasBrand = brand.length > 0;
   const host = adEscapeHtml(ad.host || '');
   const initial = adEscapeHtml(String(ad.brand || ad.host || 'AD').trim().charAt(0).toUpperCase() || 'A');
+  const layoutClass = image ? 'grid' : 'grid single';
   const backdropStyle = image ? ` style="background-image:url('${adEscapeHtml(image)}')"` : '';
   const posterStyle = image ? ` style="background-image:url('${adEscapeHtml(image)}')"` : '';
   return `<!doctype html>
@@ -236,6 +216,10 @@ function renderCreativeAdFrame(creative) {
     .backdrop{position:absolute;inset:-6%;background-position:center;background-size:cover;filter:blur(26px) saturate(1.25);opacity:.42;transform:scale(1.08)}
     .veil{position:absolute;inset:0;background:linear-gradient(90deg,#05070dc9 0%,#05070d80 52%,#05070d3d 100%),linear-gradient(0deg,#05070dd9,transparent 62%)}
     .grid{position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.78fr);align-items:center;gap:clamp(14px,3vw,36px);padding:clamp(16px,4vw,44px)}
+    .grid.single{grid-template-columns:minmax(0,1fr);place-items:center;text-align:center}
+    .grid.single .copy{align-items:center;text-align:center}
+    .grid.single h1{font-size:clamp(22px,4.6vw,46px);max-width:18ch}
+    .grid.single p{max-width:46ch}
     .copy{display:flex;flex-direction:column;align-items:flex-start;gap:clamp(6px,1.4vh,12px);min-width:0}
     .chip{display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border:1px solid #ffffff2b;border-radius:999px;background:#080c14b8;color:#e2e8f0;font-size:clamp(10px,1.6vw,13px);font-weight:650}
     .chip::before{content:'';width:6px;height:6px;border-radius:50%;background:#a3e635;box-shadow:0 0 10px #a3e635}
@@ -260,16 +244,16 @@ function renderCreativeAdFrame(creative) {
   <a class="ad" href="${adEscapeHtml(AD_LINK_URL)}" target="_blank" rel="noopener noreferrer nofollow sponsored" aria-label="${adEscapeHtml(ad.title)}">
     <span class="backdrop"${backdropStyle}></span>
     <span class="veil"></span>
-    <span class="grid">
+    <span class="${layoutClass}">
       <span class="copy">
         <span class="chip">إعلان ممول</span>
-        <span class="brand"><span class="logo">${initial}</span><span>${brand}</span></span>
+        ${hasBrand ? '<span class="brand"><span class="logo">' + initial + '</span><span>' + brand + '</span></span>' : ''}
         <h1>${adEscapeHtml(ad.title)}</h1>
         <p>${adEscapeHtml(ad.description)}</p>
         <span class="cta">زيارة الإعلان<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M9 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3"/></svg></span>
         <span class="hint">${host ? 'المعلن: ' + host : 'اضغط للاطلاع على تفاصيل العرض'}</span>
       </span>
-      <span class="poster"${posterStyle}>${image ? '' : '<span class="monogram">' + initial + '</span>'}</span>
+      ${image ? '<span class="poster"' + posterStyle + '></span>' : ''}
     </span>
   </a>
 </body>
