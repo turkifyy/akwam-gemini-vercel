@@ -1728,22 +1728,23 @@ const worker = {
     if (url.pathname === '/api/translate') return handleTranslate(request, env);
     if (url.pathname === '/__bridge/bootstrap.js') return javascript(bootstrapScript);
     if (url.pathname === '/__bridge/translator.js') return javascript(translatorScript);
-    if (url.pathname === '/__bridge/ad') return handleAdBridge(request);
+    if (url.pathname === '/__bridge/ad') return handleAdBridge(request, env);
     if (url.pathname === '/site' || url.pathname.startsWith('/site/')) return proxyAkwam(request, env, url);
     return json({error:'Not found'}, 404);
   }
 };
 
-function handleAdBridge(request) {
+function handleAdBridge(request, env) {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return new Response('Method not allowed', {status:405, headers:{Allow:'GET, HEAD','Cache-Control':'no-store'}});
   }
+  const parentOrigins = [...allowedParents(env)].join(' ');
   const headers = new Headers({
     'Content-Type':'text/html; charset=utf-8',
     'Cache-Control':'no-store',
     'Referrer-Policy':'strict-origin-when-cross-origin',
     'X-Content-Type-Options':'nosniff',
-    'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
+    'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'" + (parentOrigins ? ' ' + parentOrigins : '')
   });
   const html = `<!doctype html>
 <html lang="ar" dir="rtl">
