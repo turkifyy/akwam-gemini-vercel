@@ -575,7 +575,7 @@ test('fullscreen ad pauses at the exact position and resumes after forty-five se
   assert.equal(adFrame.src, 'https://worker.example/__bridge/ad');
   assert.equal(adFrame.attributes.title, 'إعلان ممول');
   assert.equal(adFrame.attributes.loading, 'eager');
-  assert.equal(adFrame.attributes.sandbox, 'allow-popups allow-popups-to-escape-sandbox');
+  assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
   assert.equal(frameShell.className, 'akwam-ad-frame-shell');
   assert.equal(frameShell.children.length, 1);
   assert.match(countdown.textContent, /45 ثوانٍ$/);
