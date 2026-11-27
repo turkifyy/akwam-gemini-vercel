@@ -14,10 +14,8 @@ export const bootstrapScript = String.raw`(() => {
   const episodePage = /^\/episode\/\d+(?:\/|$)/.test(pagePath);
   const seriesPage = /^\/series\/\d+(?:\/|$)/.test(pagePath);
   const prefix = location.origin + routePath;
-  const adLinkUrl = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
   const adBridgeUrl = String(config.adBridgeUrl || new URL('/__bridge/ad', location.origin).href);
   const originalFetch = window.fetch.bind(window);
-  const originalOpen = typeof window.open === 'function' ? window.open.bind(window) : () => null;
 
   function internal(path) {
     return path === '/health' || path.startsWith('/api/') || path.startsWith('/__bridge/');
@@ -65,9 +63,6 @@ export const bootstrapScript = String.raw`(() => {
     try {
       const destination = new URL(String(url), location.href);
       if (destination.protocol !== 'http:' && destination.protocol !== 'https:') return null;
-      if (destination.href === adLinkUrl && String(target || '').toLowerCase() === '_blank') {
-        return originalOpen(destination.href, '_blank', 'noopener,noreferrer');
-      }
       const routed = new URL(proxyUrl(destination.href), location.href);
       const internalPath = routePath;
       const isInternal = routed.origin === location.origin &&
@@ -274,7 +269,6 @@ export const bootstrapScript = String.raw`(() => {
       if (!link) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (link.getAttribute('href') === adLinkUrl) window.open(adLinkUrl, '_blank');
     }, true);
     let nextEpisodeUrl = '';
     let nextEpisodeResolved = false;
@@ -585,7 +579,7 @@ export const bootstrapScript = String.raw`(() => {
       adFrame.setAttribute('title','إعلان ممول');
       adFrame.setAttribute('loading','eager');
       adFrame.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
-      adFrame.setAttribute('sandbox','allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+      adFrame.setAttribute('sandbox','allow-scripts allow-forms allow-same-origin');
       adFrame.src = 'about:blank';
       adFrameShell.appendChild(adFrame);
 
