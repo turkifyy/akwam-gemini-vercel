@@ -585,7 +585,7 @@ export const bootstrapScript = String.raw`(() => {
       adFrame.setAttribute('title','إعلان ممول');
       adFrame.setAttribute('loading','eager');
       adFrame.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
-      adFrame.setAttribute('sandbox','allow-popups allow-popups-to-escape-sandbox');
+      adFrame.setAttribute('sandbox','allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
       adFrame.src = 'about:blank';
       adFrameShell.appendChild(adFrame);
 
