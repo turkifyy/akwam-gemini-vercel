@@ -14,10 +14,8 @@ const bootstrapScript = String.raw`(() => {
   const episodePage = /^\/episode\/\d+(?:\/|$)/.test(pagePath);
   const seriesPage = /^\/series\/\d+(?:\/|$)/.test(pagePath);
   const prefix = location.origin + routePath;
-  const adLinkUrl = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
   const adBridgeUrl = String(config.adBridgeUrl || new URL('/__bridge/ad', location.origin).href);
   const originalFetch = window.fetch.bind(window);
-  const originalOpen = typeof window.open === 'function' ? window.open.bind(window) : () => null;
 
   function internal(path) {
     return path === '/health' || path.startsWith('/api/') || path.startsWith('/__bridge/');
@@ -65,9 +63,6 @@ const bootstrapScript = String.raw`(() => {
     try {
       const destination = new URL(String(url), location.href);
       if (destination.protocol !== 'http:' && destination.protocol !== 'https:') return null;
-      if (destination.href === adLinkUrl && String(target || '').toLowerCase() === '_blank') {
-        return originalOpen(destination.href, '_blank', 'noopener,noreferrer');
-      }
       const routed = new URL(proxyUrl(destination.href), location.href);
       const internalPath = routePath;
       const isInternal = routed.origin === location.origin &&
@@ -274,7 +269,6 @@ const bootstrapScript = String.raw`(() => {
       if (!link) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (link.getAttribute('href') === adLinkUrl) window.open(adLinkUrl, '_blank');
     }, true);
     let nextEpisodeUrl = '';
     let nextEpisodeResolved = false;
@@ -585,7 +579,7 @@ const bootstrapScript = String.raw`(() => {
       adFrame.setAttribute('title','إعلان ممول');
       adFrame.setAttribute('loading','eager');
       adFrame.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
-      adFrame.setAttribute('sandbox','allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+      adFrame.setAttribute('sandbox','allow-scripts allow-forms allow-same-origin');
       adFrame.src = 'about:blank';
       adFrameShell.appendChild(adFrame);
 
@@ -1728,7 +1722,7 @@ const worker = {
     if (url.pathname === '/api/translate') return handleTranslate(request, env);
     if (url.pathname === '/__bridge/bootstrap.js') return javascript(bootstrapScript);
     if (url.pathname === '/__bridge/translator.js') return javascript(translatorScript);
-    if (url.pathname === '/__bridge/ad') return handleAdBridge(request, env);
+    if (url.pathname === '/__bridge/ad') return handleAdBridge(request);
     if (url.pathname === '/site' || url.pathname.startsWith('/site/')) return proxyAkwam(request, env, url);
     return json({error:'Not found'}, 404);
   }
@@ -1736,230 +1730,21 @@ const worker = {
 
 
 
-async function handleAdBridge(request, env) {
+async function handleAdBridge(request) {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return new Response('Method not allowed', {status:405, headers:{Allow:'GET, HEAD','Cache-Control':'no-store'}});
   }
-  const creative = request.method === 'HEAD' ? AD_FALLBACK : await resolveAdCreative(env);
-  const parentOrigins = [...allowedParents(env)].join(' ');
-  const headers = new Headers({
-    'Content-Type':'text/html; charset=utf-8',
-    'Cache-Control':'no-store',
-    'Referrer-Policy':'strict-origin-when-cross-origin',
-    'X-Content-Type-Options':'nosniff',
-    'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'" + (parentOrigins ? ' ' + parentOrigins : '')
+  // Send the player's ad frame straight to the advertiser so its landing page
+  // renders inside the same iframe, the way a browser would display it.
+  return new Response(null, {
+    status:302,
+    headers:{
+      'Location':AD_LINK_URL,
+      'Cache-Control':'no-store',
+      'Referrer-Policy':'strict-origin-when-cross-origin',
+      'X-Content-Type-Options':'nosniff'
+    }
   });
-  return new Response(request.method === 'HEAD' ? null : renderCreativeAdFrame(creative), {status:200, headers});
-}
-
-const AD_FALLBACK = {
-  title:'شاهد عرض الراعي',
-  description:'افتح عرض المعلن في تبويب جديد، وسيستأنف الفيديو تلقائيًا بعد انتهاء الإعلان.',
-  image:'',
-  brand:'',
-  host:''
-};
-const AD_PROBE_TIMEOUT_MS = 2500;
-const AD_PROBE_TTL_SECONDS = 600;
-const AD_PREVIEW_CACHE_VERSION = '2026-11-27-4';
-const AD_PROBE_HTML_LIMIT = 350000;
-const AD_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-
-async function resolveAdCreative(env) {
-  if (String(env?.AD_PREVIEW || '').toLowerCase() === 'off') return {...AD_FALLBACK};
-  const cache = typeof caches !== 'undefined' && caches.default ? caches.default : null;
-  const key = new Request('https://ad-preview.invalid/' + AD_PREVIEW_CACHE_VERSION + '/' + encodeURIComponent(AD_LINK_URL));
-  if (cache) {
-    try {
-      const hit = await cache.match(key);
-      if (hit) return await hit.json();
-    } catch (_) {}
-  }
-  const creative = await probeAdCreative();
-  if (cache) {
-    try {
-      await cache.put(key, new Response(JSON.stringify(creative), {
-        headers:{'Content-Type':'application/json','Cache-Control':'public, max-age=' + AD_PROBE_TTL_SECONDS}
-      }));
-    } catch (_) {}
-  }
-  return creative;
-}
-
-async function probeAdCreative() {
-  let response;
-  try {
-    const controller = typeof AbortController === 'function' ? new AbortController() : null;
-    const timer = controller ? setTimeout(() => controller.abort(), AD_PROBE_TIMEOUT_MS) : null;
-    try {
-      response = await fetch(AD_LINK_URL, {
-        redirect:'follow',
-        headers:{
-          'User-Agent':AD_UA,
-          'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-          'Accept-Language':'ar,en-US;q=0.8,en;q=0.7',
-          'Upgrade-Insecure-Requests':'1'
-        },
-        signal:controller ? controller.signal : undefined
-      });
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
-  } catch (_) {
-    return {...AD_FALLBACK};
-  }
-  if (!response || !response.ok) return {...AD_FALLBACK};
-  const finalUrl = response.url || AD_LINK_URL;
-  let html = '';
-  try { html = (await response.text()).slice(0, AD_PROBE_HTML_LIMIT); }
-  catch (_) {}
-  const meta = adMetaFromHtml(html, finalUrl);
-  return {
-    title: meta.title || AD_FALLBACK.title,
-    description: meta.description || AD_FALLBACK.description,
-    image: meta.image || '',
-    brand: meta.brand || AD_FALLBACK.brand,
-    host: adHostLabel(finalUrl) === adHostLabel(AD_LINK_URL) ? '' : adHostLabel(finalUrl)
-  };
-}
-
-
-
-function adMetaFromHtml(html, baseUrl) {
-  const head = String(html || '').slice(0, AD_PROBE_HTML_LIMIT);
-  const grab = (...names) => {
-    for (const name of names) {
-      const attr = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const patterns = [
-        new RegExp('<meta[^>]+(?:property|name)=["\']' + attr + '["\'][^>]*content=["\']([^"\']*)["\']', 'i'),
-        new RegExp('<meta[^>]+content=["\']([^"\']*)["\'][^>]*(?:property|name)=["\']' + attr + '["\']', 'i')
-      ];
-      for (const pattern of patterns) {
-        const match = head.match(pattern);
-        if (match && String(match[1]).trim()) return adText(match[1]);
-      }
-    }
-    return '';
-  };
-  const titleTag = (head.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '';
-  const rawImage = grab('og:image:secure_url','og:image','twitter:image','twitter:image:src');
-  return {
-    title: grab('og:title','twitter:title') || adText(titleTag),
-    description: grab('og:description','twitter:description','description'),
-    image: absoluteAdImage(rawImage, baseUrl),
-    brand: grab('og:site_name','application-name')
-  };
-}
-
-function adText(value) {
-  return String(value || '')
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#0*39;|&apos;/gi, "'")
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 180);
-}
-
-function absoluteAdImage(value, baseUrl) {
-  const raw = String(value || '').trim();
-  if (!raw) return '';
-  try {
-    const url = new URL(raw, baseUrl || AD_LINK_URL);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : '';
-  } catch (_) {
-    return '';
-  }
-}
-
-function adHostLabel(rawUrl) {
-  try {
-    return new URL(rawUrl).hostname.replace(/^www\./, '');
-  } catch (_) {
-    return '';
-  }
-}
-
-function adEscapeHtml(value) {
-  return String(value == null ? '' : value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-
-function renderCreativeAdFrame(creative) {
-  const ad = {...AD_FALLBACK, ...(creative || {})};
-  const image = absoluteAdImage(ad.image, AD_LINK_URL);
-  const brand = adEscapeHtml(ad.brand || '');
-  const hasBrand = brand.length > 0;
-  const host = adEscapeHtml(ad.host || '');
-  const initial = adEscapeHtml(String(ad.brand || ad.host || 'AD').trim().charAt(0).toUpperCase() || 'A');
-  const layoutClass = image ? 'grid' : 'grid single';
-  const backdropStyle = image ? ` style="background-image:url('${adEscapeHtml(image)}')"` : '';
-  const posterStyle = image ? ` style="background-image:url('${adEscapeHtml(image)}')"` : '';
-  return `<!doctype html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>إعلان ممول</title>
-  <style>
-    *{box-sizing:border-box}
-    html,body{width:100%;height:100%;margin:0}
-    body{background:#070a12;font:16px/1.55 system-ui,-apple-system,'Segoe UI',sans-serif;color:#f8fafc;overflow:hidden}
-    .ad{position:relative;display:block;width:100%;height:100%;overflow:hidden;text-decoration:none;color:inherit;isolation:isolate;background:radial-gradient(120% 90% at 78% 8%,#1b2b47,#0a101c 58%,#060910)}
-    .backdrop{position:absolute;inset:-6%;background-position:center;background-size:cover;filter:blur(26px) saturate(1.25);opacity:.42;transform:scale(1.08)}
-    .veil{position:absolute;inset:0;background:linear-gradient(90deg,#05070dc9 0%,#05070d80 52%,#05070d3d 100%),linear-gradient(0deg,#05070dd9,transparent 62%)}
-    .grid{position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.78fr);align-items:center;gap:clamp(14px,3vw,36px);padding:clamp(16px,4vw,44px)}
-    .grid.single{grid-template-columns:minmax(0,1fr);place-items:center;text-align:center}
-    .grid.single .copy{align-items:center;text-align:center}
-    .grid.single h1{font-size:clamp(22px,4.6vw,46px);max-width:18ch}
-    .grid.single p{max-width:46ch}
-    .copy{display:flex;flex-direction:column;align-items:flex-start;gap:clamp(6px,1.4vh,12px);min-width:0}
-    .chip{display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border:1px solid #ffffff2b;border-radius:999px;background:#080c14b8;color:#e2e8f0;font-size:clamp(10px,1.6vw,13px);font-weight:650}
-    .chip::before{content:'';width:6px;height:6px;border-radius:50%;background:#a3e635;box-shadow:0 0 10px #a3e635}
-    .brand{display:flex;align-items:center;gap:8px;color:#e5eaf2;font-size:clamp(11px,1.7vw,14px);font-weight:650;opacity:.94;min-width:0}
-    .brand span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .logo{flex:none;display:grid;place-items:center;width:clamp(24px,3.4vw,32px);height:clamp(24px,3.4vw,32px);border-radius:8px;background:#f8fafc;color:#0b1220;font-weight:800;font-size:clamp(12px,1.8vw,16px)}
-    h1{margin:0;font-size:clamp(19px,3.9vw,42px);line-height:1.18;font-weight:800;letter-spacing:-.01em;text-shadow:0 2px 20px #000a;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-    p{margin:0;max-width:52ch;color:#c9d4e3;font-size:clamp(12px,1.85vw,17px);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-    .cta{display:inline-flex;align-items:center;justify-content:center;gap:8px;margin-top:clamp(2px,1vh,8px);min-height:clamp(38px,5.6vw,52px);padding:0 clamp(16px,2.6vw,30px);border-radius:12px;background:#a3e635;color:#10160a;font-size:clamp(13px,1.9vw,17px);font-weight:800;box-shadow:0 14px 36px #0008,0 0 0 1px #ffffff1f inset;transition:background .16s ease,transform .16s ease}
-    .cta svg{width:1.05em;height:1.05em;stroke:currentColor;stroke-width:2.3;fill:none;stroke-linecap:round;stroke-linejoin:round}
-    .hint{color:#93a1b5;font-size:clamp(9px,1.3vw,12px)}
-    .poster{justify-self:center;width:100%;max-height:76%;aspect-ratio:4/3;border-radius:16px;border:1px solid #ffffff1f;background-color:#0d1524d9;background-position:center;background-size:contain;background-repeat:no-repeat;box-shadow:0 24px 60px #0009}
-    .monogram{display:grid;place-items:center;width:100%;height:100%;font-size:clamp(40px,9vw,110px);font-weight:900;color:#dbeafe;background:radial-gradient(circle at 40% 30%,#22324f,#0c1422)}
-    .ad:hover .cta{background:#bef264;transform:translateY(-1px)}
-    .ad:focus-visible{outline:3px solid #fff;outline-offset:-6px}
-    @media(max-width:640px){.grid{grid-template-columns:1fr;padding:clamp(14px,5vw,26px)}.poster{display:none}p{display:none}}
-    @media(max-height:380px){.grid{padding:12px 18px}h1{-webkit-line-clamp:2}.poster{max-height:88%}p{display:none}}
-    @media(prefers-reduced-motion:reduce){*{transition:none!important}}
-  </style>
-</head>
-<body>
-  <a class="ad" href="${adEscapeHtml(AD_LINK_URL)}" target="_blank" rel="noopener noreferrer nofollow sponsored" aria-label="${adEscapeHtml(ad.title)}">
-    <span class="backdrop"${backdropStyle}></span>
-    <span class="veil"></span>
-    <span class="${layoutClass}">
-      <span class="copy">
-        <span class="chip">إعلان ممول</span>
-        ${hasBrand ? '<span class="brand"><span class="logo">' + initial + '</span><span>' + brand + '</span></span>' : ''}
-        <h1>${adEscapeHtml(ad.title)}</h1>
-        <p>${adEscapeHtml(ad.description)}</p>
-        <span class="cta">زيارة الإعلان<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M9 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3"/></svg></span>
-        <span class="hint">${host ? 'المعلن: ' + host : 'اضغط للاطلاع على تفاصيل العرض'}</span>
-      </span>
-      ${image ? '<span class="poster"' + posterStyle + '></span>' : ''}
-    </span>
-  </a>
-</body>
-</html>`;
 }
 
 function allowedParents(env) {
