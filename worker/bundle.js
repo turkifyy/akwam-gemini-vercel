@@ -1730,10 +1730,22 @@ const worker = {
     if (url.pathname === '/__bridge/translator.js') return javascript(translatorScript);
     if (url.pathname === '/__bridge/ad') return handleAdBridge(request, env);
     if (url.pathname === '/__bridge/ad-meta') return handleAdMeta(request, env);
+    if (url.pathname === '/__bridge/ad-raw') return handleAdRaw(request, env);
     if (url.pathname === '/site' || url.pathname.startsWith('/site/')) return proxyAkwam(request, env, url);
     return json({error:'Not found'}, 404);
   }
 };
+
+async function handleAdRaw(request, env) {
+  if (request.method !== 'GET') return new Response('Method not allowed', {status:405});
+  try {
+    const res = await fetch(AD_LINK_URL, {redirect:'follow', headers:{'User-Agent':AD_UA,'Accept':'text/html,application/xhtml+xml','Accept-Language':'ar,en;q=0.8'}});
+    const text = await res.text();
+    return new Response(text, {headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
+  } catch (error) {
+    return new Response('error: ' + error, {headers:{'Content-Type':'text/plain'}});
+  }
+}
 
 async function handleAdMeta(request, env) {
   if (request.method !== 'GET') {
