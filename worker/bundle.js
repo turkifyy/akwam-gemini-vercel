@@ -1756,6 +1756,7 @@ async function handleAdBridge(request, env) {
   return new Response(request.method === 'HEAD' ? null : html, {status:200, headers});
 }
 
+const AD_LINK_ORIGIN = (() => { try { return new URL(AD_LINK_URL).origin; } catch (_) { return ''; } })();
 const AD_FALLBACK = {
   frameable:false,
   title:'عرض مميز من رعاة الموقع',
@@ -1814,19 +1815,34 @@ async function probeAdCreative() {
   }
   if (!response || !response.ok) return {...AD_FALLBACK};
   const finalUrl = response.url || AD_LINK_URL;
-  const frameable = isFrameable(response.headers);
   let html = '';
   try { html = (await response.text()).slice(0, AD_PROBE_HTML_LIMIT); }
   catch (_) {}
   const meta = adMetaFromHtml(html, finalUrl);
   return {
-    frameable,
+    frameable: adFrameIsEmbeddable(response.headers, html, finalUrl),
     title: meta.title || AD_FALLBACK.title,
     description: meta.description || AD_FALLBACK.description,
     image: meta.image || '',
     brand: meta.brand || AD_FALLBACK.brand,
     host: adHostLabel(finalUrl)
   };
+}
+
+function adFrameIsEmbeddable(headers, html, finalUrl) {
+  if (!isFrameable(headers)) return false;
+  let finalOrigin = '';
+  try { finalOrigin = new URL(finalUrl).origin; }
+  catch (_) { return false; }
+  // Redirect ad zones hand the browser a different destination than the one the
+  // probe sees, and that destination usually refuses framing. Only embed when the
+  // ad host itself answered with a real document, so a blocked frame can never
+  // replace the ad area with a browser error page.
+  if (finalOrigin !== AD_LINK_ORIGIN) return false;
+  const source = String(html || '');
+  if (source.length < 1200) return false;
+  if (!/<body[\s>]/i.test(source)) return false;
+  return /<title[^>]*>\s*\S/i.test(source);
 }
 
 function isFrameable(headers) {
