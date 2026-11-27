@@ -486,7 +486,7 @@ test('old immersion dismissals still start paused and out of fullscreen', () => 
   assert.equal(page.video.playCalls, 0);
 });
 
-test('only the sponsored fullscreen link can open an external popup', () => {
+test('the sponsored link and other external links cannot open popups', () => {
   const page = runWatchPage(1);
   const click = href => {
     const link = {getAttribute(name) { return name === 'href' ? href : null; }};
@@ -503,13 +503,12 @@ test('only the sponsored fullscreen link can open an external popup', () => {
   const adUrl = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
   const adClick = click(adUrl);
   assert.equal(adClick.prevented, true);
-  assert.equal(page.window.openCalls.length, 1);
-  assert.equal(page.window.openCalls[0][0], adUrl);
-  assert.equal(page.window.openCalls[0][1], '_blank');
+  assert.equal(page.window.openCalls.length, 0);
+  assert.equal(page.window.open(adUrl,'_blank'), null);
 
   const externalClick = click('https://unapproved.example/');
   assert.equal(externalClick.prevented, true);
-  assert.equal(page.window.openCalls.length, 1);
+  assert.equal(page.window.openCalls.length, 0);
   assert.equal(page.window.open('https://unapproved.example/','_blank'), null);
 });
 
@@ -575,7 +574,7 @@ test('fullscreen ad pauses at the exact position and resumes after forty-five se
   assert.equal(adFrame.src, 'https://worker.example/__bridge/ad');
   assert.equal(adFrame.attributes.title, 'إعلان ممول');
   assert.equal(adFrame.attributes.loading, 'eager');
-  assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+  assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-forms allow-same-origin');
   assert.equal(frameShell.className, 'akwam-ad-frame-shell');
   assert.equal(frameShell.children.length, 1);
   assert.match(countdown.textContent, /45 ثوانٍ$/);
