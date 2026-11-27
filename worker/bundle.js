@@ -1761,7 +1761,7 @@ const AD_FALLBACK = {
 };
 const AD_PROBE_TIMEOUT_MS = 4000;
 const AD_PROBE_TTL_SECONDS = 600;
-const AD_PREVIEW_CACHE_VERSION = '2026-11-27-3';
+const AD_PREVIEW_CACHE_VERSION = '2026-11-27-4';
 const AD_PROBE_HTML_LIMIT = 350000;
 const AD_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
@@ -1819,7 +1819,7 @@ async function probeAdCreative() {
     description: meta.description || AD_FALLBACK.description,
     image: meta.image || '',
     brand: meta.brand || AD_FALLBACK.brand,
-    host: adHostLabel(finalUrl)
+    host: adHostLabel(finalUrl) === adHostLabel(AD_LINK_URL) ? '' : adHostLabel(finalUrl)
   };
 }
 
@@ -1847,7 +1847,7 @@ function adMetaFromHtml(html, baseUrl) {
     title: grab('og:title','twitter:title') || adText(titleTag),
     description: grab('og:description','twitter:description','description'),
     image: absoluteAdImage(rawImage, baseUrl),
-    brand: grab('og:site_name','application-name') || adHostLabel(baseUrl)
+    brand: grab('og:site_name','application-name')
   };
 }
 
