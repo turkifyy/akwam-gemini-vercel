@@ -384,6 +384,32 @@ test('video ad bridge resolves and renders the advertiser page inside the frame'
   assert.equal(rejected.headers.get('Allow'), 'GET, HEAD');
 });
 
+test('ad bridge uses a rendered snapshot for bot-protected landing pages', async () => {
+  const originalFetch = globalThis.fetch;
+  const adConfig = {form:{action:'/4/397db7f27bcb1e058e7ac9ba2a034a28',values:{fstu:'abc',t:'123'},e:false}};
+  const adHtml = '<!doctype html><html><body><form id="submit-form"></form><script>w=(a=\'' + encodeURIComponent(JSON.stringify(adConfig)) + '\',JSON.parse(decodeURIComponent(a)));</script></body></html>';
+  const shellHtml = '<!doctype html><html><body><script>window.datadome={is_bot: \'1\', traffic_rule_response: \'block\'};</script><div class="content"><div id="funnel-ai"></div></div></body></html>';
+  globalThis.fetch = async () => {
+    if (!globalThis.fetch.called) {
+      globalThis.fetch.called = true;
+      return new Response(adHtml, {status:200, headers:{'Content-Type':'text/html'}});
+    }
+    const offer = new Response(shellHtml, {status:200, headers:{'Content-Type':'text/html; charset=utf-8','X-Frame-Options':'DENY'}});
+    Object.defineProperty(offer, 'url', {value:'https://advertiser.example/offer?a=1&b=2'});
+    return offer;
+  };
+  try {
+    const response = await worker.fetch(new Request(workerUrl + '/__bridge/ad'), {});
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /image\.thum\.io\/get\/width\/1280\/crop\/800\/noanimate\/https:\/\/advertiser\.example\/offer\?a=1&amp;b=2/);
+    assert.match(html, /<img src=/);
+    assert.doesNotMatch(html, /funnel-ai/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('ad bridge falls back to the advertiser URL when resolution is blocked', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => { throw new Error('blocked'); };

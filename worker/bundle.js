@@ -1835,6 +1835,31 @@ async function resolveAdOffer() {
   }
 }
 
+function adNeedsSnapshot(html) {
+  if (/is_bot\s*:\s*['"]1['"]/i.test(html)) return true;
+  if (/id=["']funnel-ai["']/i.test(html)) return true;
+  if (/<(?:div|main)[^>]+id=["'](?:root|app)["'][^>]*>\s*<\/(?:div|main)>/i.test(html)) return true;
+  return false;
+}
+
+function renderAdSnapshot(finalUrl) {
+  let target;
+  try { target = new URL(finalUrl); }
+  catch (_) { return null; }
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') return null;
+  const snapshot = 'https://image.thum.io/get/width/1280/crop/800/noanimate/' + encodeURI(target.href);
+  return `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>إعلان</title>
+  <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f4f6f8}img{display:block;width:100%;height:100%;object-fit:cover;object-position:top center}</style>
+</head>
+<body><img src="${escapeHtmlAttribute(snapshot)}" alt="إعلان" referrerpolicy="no-referrer"></body>
+</html>`;
+}
+
 async function handleAdBridge(request, env) {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return new Response('Method not allowed', {status:405, headers:{Allow:'GET, HEAD','Cache-Control':'no-store'}});
@@ -1843,6 +1868,10 @@ async function handleAdBridge(request, env) {
   if (request.method === 'HEAD') return new Response(null, {status:200, headers});
   const offer = await resolveAdOffer();
   if (!offer) return adFallbackRedirect();
+  if (adNeedsSnapshot(offer.html)) {
+    const snapshot = renderAdSnapshot(offer.finalUrl);
+    if (snapshot) return new Response(snapshot, {status:200, headers});
+  }
   const body = rewriteAdHtml(offer.html, offer.finalUrl);
   return new Response(body, {status:200, headers});
 }
