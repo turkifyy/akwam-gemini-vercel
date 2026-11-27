@@ -365,7 +365,8 @@ test('video ad bridge serves a secure first-party page with an explicit sponsor 
 
 test('the ad frame embeds the sponsor live when its landing page allows framing', async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response('<html><head><meta property="og:title" content="Bank offers"><meta property="og:image" content="/hero.jpg"></head><body></body></html>', {
+  const livePage = '<html><head><title>Bank offers</title><meta property="og:title" content="Bank offers"><meta property="og:image" content="/hero.jpg"></head><body><p>' + 'offer details '.repeat(120) + '</p></body></html>';
+  globalThis.fetch = async () => new Response(livePage, {
     status:200,
     headers:{'Content-Type':'text/html'}
   });
