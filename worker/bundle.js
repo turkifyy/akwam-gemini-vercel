@@ -1776,7 +1776,7 @@ const AD_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHT
 async function resolveAdCreative(env) {
   if (String(env?.AD_PREVIEW || '').toLowerCase() === 'off') return {...AD_FALLBACK};
   const cache = typeof caches !== 'undefined' && caches.default ? caches.default : null;
-  const key = new Request('https://ad-preview.invalid/' + encodeURIComponent(AD_LINK_URL));
+  const key = new Request('https://ad-preview.invalid/v2/' + encodeURIComponent(AD_LINK_URL));
   if (cache) {
     try {
       const hit = await cache.match(key);
@@ -1823,6 +1823,7 @@ async function probeAdCreative() {
   catch (_) {}
   const meta = adMetaFromHtml(html, finalUrl);
   return {
+    debug:{status:response.status, bytes:html.length, finalUrl, titleTag:(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]||'', ogCount:(html.match(/<meta/gi)||[]).length},
     title: meta.title || AD_FALLBACK.title,
     description: meta.description || AD_FALLBACK.description,
     image: meta.image || '',
