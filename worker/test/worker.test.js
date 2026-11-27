@@ -338,19 +338,21 @@ test('injected scripts bypass stale browser caches', async () => {
 });
 
 test('video ad bridge serves a secure first-party page with an explicit sponsor link', async () => {
-  const response = await worker.fetch(new Request(workerUrl + '/__bridge/ad?url=https://attacker.example'), {});
+  const env = {ALLOWED_PARENT_ORIGINS:'https://turkifyseries.vercel.app,https://akwam-gemini-vercel.vercel.app'};
+  const response = await worker.fetch(new Request(workerUrl + '/__bridge/ad?url=https://attacker.example'), env);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('Content-Type'), 'text/html; charset=utf-8');
   assert.equal(response.headers.get('Location'), null);
   assert.equal(response.headers.get('Cache-Control'), 'no-store');
   assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
-  assert.equal(response.headers.get('Content-Security-Policy'), "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
+  assert.equal(response.headers.get('Content-Security-Policy'), "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self' https://turkifyseries.vercel.app https://akwam-gemini-vercel.vercel.app");
+  assert.doesNotMatch(response.headers.get('Content-Security-Policy'), /attacker\.example/);
   const html = await response.text();
   assert.match(html, /lang="ar" dir="rtl"/);
   assert.match(html, /href="https:\/\/asiafilm\.org\/4\/397db7f27bcb1e058e7ac9ba2a034a28" target="_blank" rel="noopener noreferrer nofollow sponsored"/);
   assert.doesNotMatch(html, /attacker\.example/);
 
-  const head = await worker.fetch(new Request(workerUrl + '/__bridge/ad', {method:'HEAD'}), {});
+  const head = await worker.fetch(new Request(workerUrl + '/__bridge/ad', {method:'HEAD'}), env);
   assert.equal(head.status, 200);
   assert.equal(await head.text(), '');
 
