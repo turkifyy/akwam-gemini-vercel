@@ -37,11 +37,44 @@ function handleAdBridge(request) {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return new Response('Method not allowed', {status:405, headers:{Allow:'GET, HEAD','Cache-Control':'no-store'}});
   }
-  return new Response(null, {status:302, headers:{
-    Location:AD_LINK_URL,
+  const headers = new Headers({
+    'Content-Type':'text/html; charset=utf-8',
     'Cache-Control':'no-store',
-    'Referrer-Policy':'strict-origin-when-cross-origin'
-  }});
+    'Referrer-Policy':'strict-origin-when-cross-origin',
+    'X-Content-Type-Options':'nosniff',
+    'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
+  });
+  const html = `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>إعلان ممول</title>
+  <style>
+    *{box-sizing:border-box}
+    body{display:grid;min-height:100vh;margin:0;padding:24px;place-items:center;background:radial-gradient(ellipse at 50% 0%,#1a2943,#080b12 72%);color:#f8fafc;font:16px/1.7 system-ui,sans-serif}
+    main{width:min(100%,680px);padding:clamp(24px,6vw,52px);border:1px solid #ffffff24;border-radius:22px;background:#101827e8;box-shadow:0 24px 80px #0008;text-align:center}
+    .label{display:inline-block;padding:4px 12px;border:1px solid #94a3b833;border-radius:999px;color:#cbd5e1;font-size:13px}
+    h1{margin:20px 0 8px;font-size:clamp(24px,5vw,38px);line-height:1.25}
+    p{max-width:46ch;margin:0 auto 26px;color:#cbd5e1}
+    a{display:inline-flex;min-height:48px;align-items:center;justify-content:center;padding:10px 22px;border-radius:12px;background:#f59e0b;color:#111827;font-weight:750;text-decoration:none;transition:background .18s ease,transform .18s ease}
+    a:hover{transform:translateY(-1px);background:#fbbf24}
+    a:focus-visible{outline:3px solid #fff;outline-offset:4px}
+    small{display:block;margin-top:18px;color:#94a3b8;font-size:12px}
+    @media(prefers-reduced-motion:reduce){a{transition:none}}
+  </style>
+</head>
+<body>
+  <main>
+    <span class="label">إعلان ممول</span>
+    <h1>شكرًا لدعمك</h1>
+    <p>سيستأنف الفيديو تلقائيًا. إذا رغبت بزيارة موقع المعلن، افتحه في تبويب جديد.</p>
+    <a href="${AD_LINK_URL}" target="_blank" rel="noopener noreferrer nofollow sponsored">زيارة المعلن</a>
+    <small>سيبقى الفيديو محميًا داخل المشغل، ولن تتم مغادرة الصفحة تلقائيًا.</small>
+  </main>
+</body>
+</html>`;
+  return new Response(request.method === 'HEAD' ? null : html, {status:200, headers});
 }
 
 function allowedParents(env) {

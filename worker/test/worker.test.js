@@ -337,11 +337,22 @@ test('injected scripts bypass stale browser caches', async () => {
   }
 });
 
-test('video ad bridge uses a fixed Smart Link and rejects other methods', async () => {
+test('video ad bridge serves a secure first-party page with an explicit sponsor link', async () => {
   const response = await worker.fetch(new Request(workerUrl + '/__bridge/ad?url=https://attacker.example'), {});
-  assert.equal(response.status, 302);
-  assert.equal(response.headers.get('Location'), 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Content-Type'), 'text/html; charset=utf-8');
+  assert.equal(response.headers.get('Location'), null);
   assert.equal(response.headers.get('Cache-Control'), 'no-store');
+  assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
+  assert.equal(response.headers.get('Content-Security-Policy'), "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
+  const html = await response.text();
+  assert.match(html, /lang="ar" dir="rtl"/);
+  assert.match(html, /href="https:\/\/asiafilm\.org\/4\/397db7f27bcb1e058e7ac9ba2a034a28" target="_blank" rel="noopener noreferrer nofollow sponsored"/);
+  assert.doesNotMatch(html, /attacker\.example/);
+
+  const head = await worker.fetch(new Request(workerUrl + '/__bridge/ad', {method:'HEAD'}), {});
+  assert.equal(head.status, 200);
+  assert.equal(await head.text(), '');
 
   const rejected = await worker.fetch(new Request(workerUrl + '/__bridge/ad', {method:'POST'}), {});
   assert.equal(rejected.status, 405);
@@ -351,8 +362,9 @@ test('video ad bridge uses a fixed Smart Link and rejects other methods', async 
 test('the player ad iframe is routed through the Worker bridge', async () => {
   const bootstrap = await readFile(new URL('../src/bootstrap.js', import.meta.url), 'utf8');
   const source = await readFile(new URL('../src/index.js', import.meta.url), 'utf8');
-  assert.match(bootstrap, /adFrame\.src = adBridgeUrl \|\| adLinkUrl/);
-  assert.match(bootstrap, /adFrame\.setAttribute\('sandbox','allow-scripts allow-same-origin allow-forms allow-storage-access-by-user-activation'\)/);
+  assert.match(bootstrap, /adFrame\.src = adBridgeUrl/);
+  assert.match(bootstrap, /adFrame\.setAttribute\('sandbox','allow-popups allow-popups-to-escape-sandbox'\)/);
+  assert.match(bootstrap, /new URL\('\/__bridge\/ad', location\.origin\)\.href/);
   assert.match(source, /adBridgeUrl:workerOrigin \+ '\/__bridge\/ad'/);
 });
 
