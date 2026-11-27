@@ -579,7 +579,7 @@ const bootstrapScript = String.raw`(() => {
       adFrame.setAttribute('title','إعلان ممول');
       adFrame.setAttribute('loading','eager');
       adFrame.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
-      adFrame.setAttribute('sandbox','allow-scripts allow-forms allow-same-origin');
+      adFrame.setAttribute('sandbox','allow-scripts allow-forms');
       adFrame.src = 'about:blank';
       adFrameShell.appendChild(adFrame);
 
@@ -1722,7 +1722,7 @@ const worker = {
     if (url.pathname === '/api/translate') return handleTranslate(request, env);
     if (url.pathname === '/__bridge/bootstrap.js') return javascript(bootstrapScript);
     if (url.pathname === '/__bridge/translator.js') return javascript(translatorScript);
-    if (url.pathname === '/__bridge/ad') return handleAdBridge(request);
+    if (url.pathname === '/__bridge/ad') return handleAdBridge(request, env);
     if (url.pathname === '/site' || url.pathname.startsWith('/site/')) return proxyAkwam(request, env, url);
     return json({error:'Not found'}, 404);
   }
@@ -1730,12 +1730,22 @@ const worker = {
 
 
 
-async function handleAdBridge(request) {
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return new Response('Method not allowed', {status:405, headers:{Allow:'GET, HEAD','Cache-Control':'no-store'}});
-  }
-  // Send the player's ad frame straight to the advertiser so its landing page
-  // renders inside the same iframe, the way a browser would display it.
+const AD_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+const AD_TIMEOUT_MS = 9000;
+const AD_MAX_HTML_BYTES = 2000000;
+
+function adFrameHeaders(env) {
+  const parentOrigins = [...allowedParents(env)].join(' ');
+  return new Headers({
+    'Content-Type':'text/html; charset=utf-8',
+    'Cache-Control':'no-store',
+    'Referrer-Policy':'strict-origin-when-cross-origin',
+    'X-Content-Type-Options':'nosniff',
+    'Content-Security-Policy':"frame-ancestors 'self'" + (parentOrigins ? ' ' + parentOrigins : '')
+  });
+}
+
+function adFallbackRedirect() {
   return new Response(null, {
     status:302,
     headers:{
@@ -1745,6 +1755,96 @@ async function handleAdBridge(request) {
       'X-Content-Type-Options':'nosniff'
     }
   });
+}
+
+function escapeHtmlAttribute(value) {
+  return String(value).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function rewriteAdHtml(html, finalUrl) {
+  let out = String(html);
+  out = out.replace(/<base\b[^>]*>/gi, '');
+  out = out.replace(/<meta\b[^>]*http-equiv\s*=\s*["']?\s*content-security-policy[^>]*>/gi, '');
+  out = out.replace(/<meta\b[^>]*http-equiv\s*=\s*["']?\s*refresh[^>]*>/gi, '');
+  out = out.replace(/\starget\s*=\s*(["'])_blank\1/gi, '');
+  out = out.replace(/\sintegrity\s*=\s*("[^"]*"|'[^']*')/gi, '');
+  const base = '<base href="' + escapeHtmlAttribute(finalUrl) + '">';
+  if (/<head\b[^>]*>/i.test(out)) out = out.replace(/<head\b[^>]*>/i, match => match + base);
+  else out = base + out;
+  return out;
+}
+
+async function resolveAdOffer() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AD_TIMEOUT_MS);
+  try {
+    const adResponse = await fetch(AD_LINK_URL, {
+      redirect:'follow',
+      signal:controller.signal,
+      headers:{
+        'User-Agent':AD_UA,
+        'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language':'en-US,en;q=0.9'
+      }
+    });
+    if (!adResponse.ok) return null;
+    const adHtml = await adResponse.text();
+    const match = adHtml.match(/w=\(a='([^']+)'/s);
+    if (!match) return null;
+    let config;
+    try { config = JSON.parse(decodeURIComponent(match[1])); }
+    catch (_) { return null; }
+    const action = config?.form?.action;
+    const values = config?.form?.values;
+    if (typeof action !== 'string' || !action.startsWith('/4/') || !values || typeof values !== 'object') return null;
+    const cookies = (typeof adResponse.headers.getSetCookie === 'function' ? adResponse.headers.getSetCookie() : [])
+      .map(value => String(value).split(';')[0]).join('; ');
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(values)) {
+      if (typeof value === 'string') params.set(key, value);
+    }
+    params.set('fr', '1');
+    params.set('pii', 'true');
+    for (const [key, value] of [['sw2','1280'],['sh2','720'],['sw3','1280'],['sh3','720'],['sw4','1280'],['sh4','720']]) {
+      if (!params.has(key)) params.set(key, value);
+    }
+    const clickUrl = new URL(action, 'https://asiafilm.org');
+    clickUrl.search = params.toString();
+    const clickResponse = await fetch(clickUrl.href, {
+      redirect:'follow',
+      signal:controller.signal,
+      headers:{
+        'User-Agent':AD_UA,
+        'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language':'en-US,en;q=0.9',
+        'Referer':AD_LINK_URL,
+        'Cookie':cookies
+      }
+    });
+    if (!clickResponse.ok) return null;
+    const contentType = clickResponse.headers.get('content-type') || '';
+    if (!contentType.includes('text/html')) return null;
+    const html = await clickResponse.text();
+    if (!html || html.length > AD_MAX_HTML_BYTES) return null;
+    if (/id=["']submit-form["']/i.test(html) || /w=\(a='/i.test(html)) return null;
+    return {html, finalUrl:clickResponse.url || clickUrl.href};
+  } catch (_) {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function handleAdBridge(request, env) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Method not allowed', {status:405, headers:{Allow:'GET, HEAD','Cache-Control':'no-store'}});
+  }
+  const headers = adFrameHeaders(env);
+  if (request.method === 'HEAD') return new Response(null, {status:200, headers});
+  const offer = await resolveAdOffer();
+  if (!offer) return adFallbackRedirect();
+  const body = rewriteAdHtml(offer.html, offer.finalUrl);
+  return new Response(body, {status:200, headers});
 }
 
 function allowedParents(env) {
