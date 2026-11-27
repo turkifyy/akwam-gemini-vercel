@@ -1729,10 +1729,21 @@ const worker = {
     if (url.pathname === '/__bridge/bootstrap.js') return javascript(bootstrapScript);
     if (url.pathname === '/__bridge/translator.js') return javascript(translatorScript);
     if (url.pathname === '/__bridge/ad') return handleAdBridge(request, env);
+    if (url.pathname === '/__bridge/ad-meta') return handleAdMeta(request, env);
     if (url.pathname === '/site' || url.pathname.startsWith('/site/')) return proxyAkwam(request, env, url);
     return json({error:'Not found'}, 404);
   }
 };
+
+async function handleAdMeta(request, env) {
+  if (request.method !== 'GET') {
+    return new Response('Method not allowed', {status:405, headers:{Allow:'GET','Cache-Control':'no-store'}});
+  }
+  const creative = await resolveAdCreative(env);
+  return new Response(JSON.stringify(creative), {
+    headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}
+  });
+}
 
 async function handleAdBridge(request, env) {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
