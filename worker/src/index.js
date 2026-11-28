@@ -2,7 +2,6 @@ import {bootstrapScript} from './bootstrap.js';
 import {translatorScript} from './translator.js';
 
 const DEFAULT_UPSTREAM = 'akwam.ss';
-const AD_LINK_URL = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
 const ALLOWED_LANGUAGES = new Set(['ar','en','tr','fr','de','es','it','pt','ru','fa','ur','hi','id','ja','ko','zh-CN']);
 const SEO_CATEGORIES = new Map([
   ['30',{slug:'foreign',title:'مسلسلات عالمية مترجمة | Turkify Series',heading:'مسلسلات عالمية',description:'تصفح تصنيف المسلسلات العالمية المترجمة، واكتشف العناوين والتقييمات وتفاصيل الحلقات على Turkify Series.'}],
@@ -27,159 +26,12 @@ export default {
     if (url.pathname === '/api/translate') return handleTranslate(request, env);
     if (url.pathname === '/__bridge/bootstrap.js') return javascript(bootstrapScript);
     if (url.pathname === '/__bridge/translator.js') return javascript(translatorScript);
-    if (url.pathname === '/__bridge/ad') return handleAdBridge(request, env);
     if (url.pathname === '/site' || url.pathname.startsWith('/site/')) return proxyAkwam(request, env, url);
     return json({error:'Not found'}, 404);
   }
 };
 
 
-
-const AD_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-const AD_TIMEOUT_MS = 9000;
-const AD_MAX_HTML_BYTES = 2000000;
-
-function adFrameHeaders(env) {
-  const parentOrigins = [...allowedParents(env)].join(' ');
-  return new Headers({
-    'Content-Type':'text/html; charset=utf-8',
-    'Cache-Control':'no-store',
-    'Referrer-Policy':'strict-origin-when-cross-origin',
-    'X-Content-Type-Options':'nosniff',
-    'Content-Security-Policy':"frame-ancestors 'self'" + (parentOrigins ? ' ' + parentOrigins : '')
-  });
-}
-
-function adFallbackRedirect() {
-  return new Response(null, {
-    status:302,
-    headers:{
-      'Location':AD_LINK_URL,
-      'Cache-Control':'no-store',
-      'Referrer-Policy':'strict-origin-when-cross-origin',
-      'X-Content-Type-Options':'nosniff'
-    }
-  });
-}
-
-function escapeHtmlAttribute(value) {
-  return String(value).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function rewriteAdHtml(html, finalUrl) {
-  let out = String(html);
-  out = out.replace(/<base\b[^>]*>/gi, '');
-  out = out.replace(/<meta\b[^>]*http-equiv\s*=\s*["']?\s*content-security-policy[^>]*>/gi, '');
-  out = out.replace(/<meta\b[^>]*http-equiv\s*=\s*["']?\s*refresh[^>]*>/gi, '');
-  out = out.replace(/\starget\s*=\s*(["'])_blank\1/gi, '');
-  out = out.replace(/\sintegrity\s*=\s*("[^"]*"|'[^']*')/gi, '');
-  const base = '<base href="' + escapeHtmlAttribute(finalUrl) + '">';
-  if (/<head\b[^>]*>/i.test(out)) out = out.replace(/<head\b[^>]*>/i, match => match + base);
-  else out = base + out;
-  return out;
-}
-
-async function resolveAdOffer() {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), AD_TIMEOUT_MS);
-  try {
-    const adResponse = await fetch(AD_LINK_URL, {
-      redirect:'follow',
-      signal:controller.signal,
-      headers:{
-        'User-Agent':AD_UA,
-        'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language':'en-US,en;q=0.9'
-      }
-    });
-    if (!adResponse.ok) return null;
-    const adHtml = await adResponse.text();
-    const match = adHtml.match(/w=\(a='([^']+)'/s);
-    if (!match) return null;
-    let config;
-    try { config = JSON.parse(decodeURIComponent(match[1])); }
-    catch (_) { return null; }
-    const action = config?.form?.action;
-    const values = config?.form?.values;
-    if (typeof action !== 'string' || !action.startsWith('/4/') || !values || typeof values !== 'object') return null;
-    const cookies = (typeof adResponse.headers.getSetCookie === 'function' ? adResponse.headers.getSetCookie() : [])
-      .map(value => String(value).split(';')[0]).join('; ');
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(values)) {
-      if (typeof value === 'string') params.set(key, value);
-    }
-    params.set('fr', '1');
-    params.set('pii', 'true');
-    for (const [key, value] of [['sw2','1280'],['sh2','720'],['sw3','1280'],['sh3','720'],['sw4','1280'],['sh4','720']]) {
-      if (!params.has(key)) params.set(key, value);
-    }
-    const clickUrl = new URL(action, 'https://asiafilm.org');
-    clickUrl.search = params.toString();
-    const clickResponse = await fetch(clickUrl.href, {
-      redirect:'follow',
-      signal:controller.signal,
-      headers:{
-        'User-Agent':AD_UA,
-        'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language':'en-US,en;q=0.9',
-        'Referer':AD_LINK_URL,
-        'Cookie':cookies
-      }
-    });
-    if (!clickResponse.ok) return null;
-    const contentType = clickResponse.headers.get('content-type') || '';
-    if (!contentType.includes('text/html')) return null;
-    const html = await clickResponse.text();
-    if (!html || html.length > AD_MAX_HTML_BYTES) return null;
-    if (/id=["']submit-form["']/i.test(html) || /w=\(a='/i.test(html)) return null;
-    return {html, finalUrl:clickResponse.url || clickUrl.href};
-  } catch (_) {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function adNeedsSnapshot(html) {
-  if (/is_bot\s*:\s*['"]1['"]/i.test(html)) return true;
-  if (/id=["']funnel-ai["']/i.test(html)) return true;
-  if (/<(?:div|main)[^>]+id=["'](?:root|app)["'][^>]*>\s*<\/(?:div|main)>/i.test(html)) return true;
-  return false;
-}
-
-function renderAdSnapshot(finalUrl) {
-  let target;
-  try { target = new URL(finalUrl); }
-  catch (_) { return null; }
-  if (target.protocol !== 'http:' && target.protocol !== 'https:') return null;
-  const snapshot = 'https://image.thum.io/get/width/1280/crop/800/noanimate/' + encodeURI(target.href);
-  return `<!doctype html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>إعلان</title>
-  <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f4f6f8}img{display:block;width:100%;height:100%;object-fit:cover;object-position:top center}</style>
-</head>
-<body><img src="${escapeHtmlAttribute(snapshot)}" alt="إعلان" referrerpolicy="no-referrer"></body>
-</html>`;
-}
-
-async function handleAdBridge(request, env) {
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return new Response('Method not allowed', {status:405, headers:{Allow:'GET, HEAD','Cache-Control':'no-store'}});
-  }
-  const headers = adFrameHeaders(env);
-  if (request.method === 'HEAD') return new Response(null, {status:200, headers});
-  const offer = await resolveAdOffer();
-  if (!offer) return adFallbackRedirect();
-  if (adNeedsSnapshot(offer.html)) {
-    const snapshot = renderAdSnapshot(offer.finalUrl);
-    if (snapshot) return new Response(snapshot, {status:200, headers});
-  }
-  const body = rewriteAdHtml(offer.html, offer.finalUrl);
-  return new Response(body, {status:200, headers});
-}
 
 function allowedParents(env) {
   return new Set(String(env.ALLOWED_PARENT_ORIGINS || '').split(',').map(value => {
@@ -422,7 +274,7 @@ async function proxyAkwam(request, env, url) {
   if (contentType.includes('text/html')) {
     outHeaders.set('Content-Security-Policy', "frame-ancestors 'self'" + (parentOrigin ? ' ' + parentOrigin : ''));
     const bridgeParent = seoMode ? '' : parentOrigin;
-    const inlineConfig = '<script>window.__AKWAM_BRIDGE__=' + JSON.stringify({lang,parentOrigin:bridgeParent,upstreamHost,seoMode,adBridgeUrl:workerOrigin + '/__bridge/ad'}) + ';</script>' +
+    const inlineConfig = '<script>window.__AKWAM_BRIDGE__=' + JSON.stringify({lang,parentOrigin:bridgeParent,upstreamHost,seoMode}) + ';</script>' +
       '<script src="' + workerOrigin + '/__bridge/bootstrap.js"></script>';
     const rewriter = new HTMLRewriter()
       .on('script[src]', {element(element) {
