@@ -1,5 +1,23 @@
 export const bootstrapScript = String.raw`(() => {
   'use strict';
+  /*
+   * AD SLOT README
+   * Direct Link is requested by iframe.src; the ad is never proxied or rewritten, preserving its normal attribution.
+   * Popups and top navigation are intentionally absent from sandbox permissions; all ad interaction stays in-frame.
+   * Social Bar is a fallback because a rejected Direct Link should not end the ad slot immediately.
+   * The srcdoc fallback omits allow-same-origin: combining it with allow-scripts would let this third-party script reach the platform DOM.
+   * Trade-offs: some popup creatives lose clicks; Social Bar can be cramped or detect an iframe; tracking cannot be guaranteed.
+   * blocked -> socialbar-active -> socialbar-failed -> refused is an expected fallback path, not a platform error.
+   * A blocked render may still have reached the ad server; do not rewrite or retry it automatically to change attribution.
+   * A browser may fire iframe.onload even when X-Frame-Options/CSP blocks display; this cannot be detected reliably from page JavaScript.
+   * State table: loading -> spinner; loaded -> ad; blocked -> fallback starts; socialbar-active -> fallback; socialbar-failed/refused -> message and one retry.
+   * Test: open the watch page in a browser and open DevTools.
+   * Test: inspect Network for the direct asiafilm.org request, followed by Social Bar only after fallback.
+   * Test: inspect Console for X-Frame-Options or CSP frame-ancestors warnings.
+   * Test: force an iframe error/timeout and confirm Social Bar stays in the ad slot.
+   * Test: fail Social Bar and confirm Refused to connect appears in the ad slot only.
+   * Test: verify no popup/new tab appears and the player keeps its original layout.
+   */
   const config = window.__AKWAM_BRIDGE__ || {};
   const isSmartphone = window.navigator?.userAgentData?.mobile === true ||
     /iPhone|iPod|Android.*Mobile|Windows Phone|IEMobile|BlackBerry|BB10/i.test(window.navigator?.userAgent || '');
@@ -14,7 +32,6 @@ export const bootstrapScript = String.raw`(() => {
   const episodePage = /^\/episode\/\d+(?:\/|$)/.test(pagePath);
   const seriesPage = /^\/series\/\d+(?:\/|$)/.test(pagePath);
   const prefix = location.origin + routePath;
-  const adBridgeUrl = String(config.adBridgeUrl || new URL('/__bridge/ad', location.origin).href);
   const originalFetch = window.fetch.bind(window);
 
   function internal(path) {
@@ -393,6 +410,14 @@ export const bootstrapScript = String.raw`(() => {
       '.akwam-ad-break-immersive{position:fixed!important;inset:0!important;z-index:2147483647!important}' +
       '.akwam-ad-frame-shell{position:absolute!important;inset:10px!important;overflow:hidden!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:0 18px 64px #000b!important}' +
       '.akwam-ad-frame{display:block!important;width:100%!important;height:100%!important;border:0!important;background:transparent!important}' +
+      '.akwam-ad-state{position:absolute!important;inset:0!important;z-index:3!important;display:grid!important;place-content:center!important;gap:12px!important;padding:24px!important;color:#fff!important;background:#07090fe8!important;text-align:center!important;font:500 14px/1.5 system-ui,sans-serif!important}' +
+      '.akwam-ad-state[hidden]{display:none!important}' +
+      '.akwam-ad-state[data-state="loaded"],.akwam-ad-state[data-state="socialbar-active"]{pointer-events:none!important}' +
+      '.akwam-ad-spinner{width:28px!important;height:28px!important;margin:auto!important;border:3px solid #ffffff55!important;border-top-color:#d5f287!important;border-radius:50%!important;animation:akwam-ad-spin .8s linear infinite!important}' +
+      '.akwam-ad-state[data-state="refused"] .akwam-ad-spinner{display:none!important}' +
+      '.akwam-ad-retry{justify-self:center!important;padding:9px 14px!important;border:1px solid #ffffff55!important;border-radius:8px!important;background:#d5f287!important;color:#11150f!important;font:600 14px/1.3 system-ui,sans-serif!important;cursor:pointer!important}' +
+      '.akwam-ad-retry[hidden]{display:none!important}' +
+      '@keyframes akwam-ad-spin{to{transform:rotate(360deg)}}' +
       '.akwam-ad-countdown{position:absolute!important;top:14px!important;left:14px!important;z-index:4!important;padding:8px 12px!important;border:1px solid #ffffff30!important;border-radius:8px!important;color:#fff!important;background:#000b!important;font:600 14px/1.4 system-ui,sans-serif!important;pointer-events:none!important}' +
       '@media(max-width:600px){.akwam-ad-frame-shell{inset:8px!important;border-radius:8px!important}.akwam-ad-countdown{top:12px!important;left:12px!important;padding:6px 9px!important;font-size:12px!important}}';
     (document.head || document.documentElement).appendChild(immersiveStyle);
@@ -574,14 +599,23 @@ export const bootstrapScript = String.raw`(() => {
 
       const adFrameShell = document.createElement('div');
       adFrameShell.className = 'akwam-ad-frame-shell';
-      const adFrame = document.createElement('iframe');
-      adFrame.className = 'akwam-ad-frame';
-      adFrame.setAttribute('title','إعلان ممول');
-      adFrame.setAttribute('loading','eager');
-      adFrame.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
-      adFrame.setAttribute('sandbox','allow-scripts allow-forms');
-      adFrame.src = 'about:blank';
-      adFrameShell.appendChild(adFrame);
+      let adFrame = null;
+      const adState = document.createElement('div');
+      adState.className = 'akwam-ad-state';
+      adState.setAttribute('role','status');
+      adState.setAttribute('aria-live','polite');
+      adState.hidden = true;
+      const adSpinner = document.createElement('span');
+      adSpinner.className = 'akwam-ad-spinner';
+      adSpinner.setAttribute('aria-hidden','true');
+      const adStateMessage = document.createElement('span');
+      const retryButton = document.createElement('button');
+      retryButton.className = 'akwam-ad-retry';
+      retryButton.type = 'button';
+      retryButton.textContent = 'إعادة المحاولة';
+      retryButton.hidden = true;
+      adState.append(adSpinner,adStateMessage,retryButton);
+      adFrameShell.appendChild(adState);
 
       const countdownLabel = document.createElement('div');
       countdownLabel.className = 'akwam-ad-countdown';
@@ -598,6 +632,107 @@ export const bootstrapScript = String.raw`(() => {
       let openingAdShown = false;
       let openingAdPendingPlayback = false;
       let seekStartPosition = null;
+      let adStateName = 'loading';
+      let directLoadTimer = null;
+      let socialBarTimer = null;
+      let retryUsed = false;
+
+      const directAdUrl = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
+      const socialBarUrl = 'https://bancadeltempoidea.org/14/8a3f583cff4b21baa241982099a374f0';
+
+      function clearAdTimers() {
+        if (directLoadTimer !== null) clearTimeout(directLoadTimer);
+        if (socialBarTimer !== null) clearTimeout(socialBarTimer);
+        directLoadTimer = null;
+        socialBarTimer = null;
+      }
+
+      function setAdState(name,message,retry=false) {
+        adStateName = name;
+        adState.setAttribute('data-state',name);
+        adState.hidden = name === 'loaded' || (name === 'socialbar-active' && !message);
+        adStateMessage.textContent = message;
+        retryButton.hidden = !retry;
+      }
+
+      function makeAdFrame(sandbox) {
+        const frame = document.createElement('iframe');
+        frame.className = 'akwam-ad-frame';
+        frame.setAttribute('title','إعلان ممول');
+        frame.setAttribute('loading','eager');
+        frame.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
+        frame.setAttribute('sandbox',sandbox);
+        return frame;
+      }
+
+      function showRefused() {
+        setAdState('socialbar-failed','');
+        setAdState('refused','Refused to connect — هذا الإعلان لا يسمح بالتضمين.',!retryUsed);
+      }
+
+      function startSocialBar() {
+        if (adStateName !== 'loading') return;
+        if (directLoadTimer !== null) clearTimeout(directLoadTimer);
+        directLoadTimer = null;
+        setAdState('blocked','جارٍ تحميل الإعلان البديل…');
+        if (adFrame) adFrame.remove();
+        // srcdoc inherits the page origin, so omit allow-same-origin to keep the third-party script isolated.
+        adFrame = makeAdFrame('allow-scripts allow-forms');
+        const frame = adFrame;
+        frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8"><style>' +
+          'html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent}' +
+          '</style></head><body><script data-cfasync="false" src="' + socialBarUrl +
+          '" onload="parent.postMessage({type:&#39;socialbar-loaded&#39;},&#39;*&#39;)"' +
+          ' onerror="parent.postMessage({type:&#39;socialbar-failed&#39;},&#39;*&#39;)"></script></body></html>';
+        adFrameShell.insertBefore(adFrame,adState);
+        setAdState('socialbar-active','جارٍ تحميل الإعلان البديل…');
+        socialBarTimer = setTimeout(() => {
+          if (adFrame === frame && adStateName === 'socialbar-active') showRefused();
+        },8000);
+      }
+
+      function startDirectAd() {
+        clearAdTimers();
+        if (adFrame) adFrame.remove();
+        adFrame = makeAdFrame('allow-scripts allow-same-origin allow-forms');
+        setAdState('loading','جارٍ تحميل الإعلان…');
+        const frame = adFrame;
+        frame.addEventListener('load',() => {
+          if (adFrame !== frame || adStateName !== 'loading') return;
+          if (directLoadTimer !== null) clearTimeout(directLoadTimer);
+          directLoadTimer = null;
+          setAdState('loaded','');
+        });
+        frame.addEventListener('error',() => {
+          if (adFrame === frame && adStateName === 'loading') startSocialBar();
+        });
+        frame.src = directAdUrl;
+        adFrameShell.insertBefore(frame,adState);
+        // The timeout catches missing load/error events; browser frame-policy failures may still emit load.
+        directLoadTimer = setTimeout(() => {
+          if (adFrame === frame && adStateName === 'loading') startSocialBar();
+        },6000);
+      }
+
+      function handleAdMessage(event) {
+        // Accept status signals only from the current opaque-origin fallback frame.
+        if (!adFrame || event.source !== adFrame.contentWindow) return;
+        if (event.data?.type === 'socialbar-loaded' && adStateName === 'socialbar-active') {
+          if (socialBarTimer !== null) clearTimeout(socialBarTimer);
+          socialBarTimer = null;
+          setAdState('socialbar-active','');
+        } else if (event.data?.type === 'socialbar-failed' && adStateName === 'socialbar-active') {
+          if (socialBarTimer !== null) clearTimeout(socialBarTimer);
+          socialBarTimer = null;
+          showRefused();
+        }
+      }
+      window.addEventListener('message',handleAdMessage);
+      retryButton.addEventListener('click',() => {
+        if (adStateName !== 'refused' || retryUsed) return;
+        retryUsed = true;
+        startDirectAd();
+      });
 
       function resetPlaybackPosition() {
         if (!Number.isFinite(video.currentTime)) return;
@@ -630,6 +765,9 @@ export const bootstrapScript = String.raw`(() => {
       }
 
       function closeAdBreak() {
+        clearAdTimers();
+        window.removeEventListener?.('message',handleAdMessage);
+        adFrame.srcdoc = '';
         adFrame.src = 'about:blank';
         overlay.remove();
         adActive = false;
@@ -662,7 +800,7 @@ export const bootstrapScript = String.raw`(() => {
           player.appendChild(overlay);
         }
         syncPlacement();
-        adFrame.src = adBridgeUrl;
+        startDirectAd();
         restartTicker();
       }
 
