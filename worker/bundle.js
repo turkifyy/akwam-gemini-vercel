@@ -14,7 +14,6 @@ const bootstrapScript = String.raw`(() => {
   const episodePage = /^\/episode\/\d+(?:\/|$)/.test(pagePath);
   const seriesPage = /^\/series\/\d+(?:\/|$)/.test(pagePath);
   const prefix = location.origin + routePath;
-  const adBridgeUrl = String(config.adBridgeUrl || new URL('/__bridge/ad', location.origin).href);
   const originalFetch = window.fetch.bind(window);
 
   function internal(path) {
@@ -391,8 +390,18 @@ const bootstrapScript = String.raw`(() => {
       '.akwam-ad-supported:not(.akwam-immersive-player){position:relative!important}' +
       '.akwam-ad-break{position:absolute!important;inset:0!important;z-index:2147483646!important;display:grid!important;place-items:center!important;overflow:hidden!important;background:radial-gradient(circle at 50% 35%,#1b2740,#07090f 68%)!important}' +
       '.akwam-ad-break-immersive{position:fixed!important;inset:0!important;z-index:2147483647!important}' +
-      '.akwam-ad-frame-shell{position:absolute!important;inset:10px!important;overflow:hidden!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:0 18px 64px #000b!important}' +
+      '.akwam-ad-frame-shell{position:absolute!important;inset:10px!important;overflow:hidden!important;border:0!important;border-radius:0!important;background:#07090f!important;box-shadow:0 18px 64px #000b!important}' +
       '.akwam-ad-frame{display:block!important;width:100%!important;height:100%!important;border:0!important;background:transparent!important}' +
+      '.akwam-ad-frame-shell[data-ad-state="loading"] .akwam-ad-frame,.akwam-ad-frame-shell[data-ad-state="blocked"] .akwam-ad-frame,.akwam-ad-frame-shell[data-ad-state="refused"] .akwam-ad-frame{visibility:hidden!important}' +
+      '.akwam-ad-loader{position:absolute!important;inset:0!important;display:none!important;place-content:center!important;justify-items:center!important;gap:14px!important;padding:16px!important;text-align:center!important;color:#cbd5e1!important;background:radial-gradient(circle at 50% 40%,#16233a,#07090f 70%)!important;font:600 13px/1.4 system-ui,sans-serif!important}' +
+      '.akwam-ad-frame-shell[data-ad-state="loading"] .akwam-ad-loader,.akwam-ad-frame-shell[data-ad-state="blocked"] .akwam-ad-loader{display:grid!important}' +
+      '.akwam-ad-loader::before{content:""!important;width:34px!important;height:34px!important;border-radius:50%!important;border:3px solid #ffffff26!important;border-top-color:#7dd3fc!important;animation:akwamAdSpin .9s linear infinite!important}' +
+      '@keyframes akwamAdSpin{to{transform:rotate(360deg)}}' +
+      '.akwam-ad-refused{position:absolute!important;inset:0!important;display:none!important;place-content:center!important;justify-items:center!important;gap:12px!important;padding:20px!important;text-align:center!important;color:#e2e8f0!important;background:#07090f!important;font:500 14px/1.5 system-ui,sans-serif!important}' +
+      '.akwam-ad-frame-shell[data-ad-state="refused"] .akwam-ad-refused{display:grid!important}' +
+      '.akwam-ad-refused-text{margin:0!important;max-width:34ch!important}' +
+      '.akwam-ad-retry{cursor:pointer!important;border:1px solid #ffffff33!important;border-radius:8px!important;background:#1e293b!important;color:#fff!important;padding:8px 14px!important;font:600 13px/1.2 system-ui,sans-serif!important}' +
+      '.akwam-ad-retry:hover{background:#334155!important}' +
       '.akwam-ad-countdown{position:absolute!important;top:14px!important;left:14px!important;z-index:4!important;padding:8px 12px!important;border:1px solid #ffffff30!important;border-radius:8px!important;color:#fff!important;background:#000b!important;font:600 14px/1.4 system-ui,sans-serif!important;pointer-events:none!important}' +
       '@media(max-width:600px){.akwam-ad-frame-shell{inset:8px!important;border-radius:8px!important}.akwam-ad-countdown{top:12px!important;left:12px!important;padding:6px 9px!important;font-size:12px!important}}';
     (document.head || document.documentElement).appendChild(immersiveStyle);
@@ -561,6 +570,291 @@ const bootstrapScript = String.raw`(() => {
       }
     }
 
+    // =====================================================================
+    // AD SLOT (video player only) — README
+    // ---------------------------------------------------------------------
+    // Scope: this is the single ad iframe that lives inside the video player.
+    // Nothing outside this slot is modified.
+    //
+    // Why no proxy: the Adsterra Direct Link is loaded as the iframe src
+    // exactly as issued. Adsterra counts a valid visit when its own server
+    // resolves the link with the real Referer and its own cookies. A proxy, a
+    // Worker, a URL rewrite or a screenshot breaks that attribution, so none
+    // is used. X-Frame-Options and CSP frame-ancestors stay untouched; they
+    // are never stripped, spoofed or bypassed.
+    //
+    // Why no new windows: the sandbox below omits allow-popups,
+    // allow-popups-to-escape-sandbox, allow-top-navigation and allow-modals.
+    // The parent page never calls window.open and never emits
+    // target="_blank". Clicks, scrolling, forms and scripts stay inside the
+    // ad iframe. Creatives that depend on a new tab can pay less; that
+    // trade-off is required.
+    //
+    // Why Social Bar as fallback: when the Direct Link refuses embedding the
+    // slot still earns. The Social Bar script is loaded untouched from
+    // bancadeltempoidea.org inside the same iframe with the same sandbox, so
+    // its cookies and attribution stay on the Adsterra origin.
+    //
+    // Accepted trade-offs (documented, not bugs):
+    // - allow-popups is absent, so a Social Bar click that wants a new tab is
+    //   blocked by the browser and may not be counted.
+    // - Social Bar is designed for a full page; in a small player slot it can
+    //   look compressed or not render at all.
+    // - srcdoc + allow-same-origin + allow-scripts means the Social Bar script
+    //   can technically reach this page's DOM (same origin). It is a trusted
+    //   Adsterra partner script; set AD_SLOT_CONFIG.socialBarPage to host the
+    //   snippet on a static platform file instead.
+    // - loading -> loaded | blocked -> socialbar-active | socialbar-failed ->
+    //   refused is the expected chain, not an error.
+    // - X-Frame-Options and CSP frame-ancestors cannot be read from JS, so
+    //   detection is onload plus timeout only. Verified in Chromium: an
+    //   X-Frame-Options or frame-ancestors refusal (and a DNS/network error)
+    //   still fires load, so that slot can stay in "loaded" and show the
+    //   browser's own refusal page. The timeout path covers hanging requests.
+    //   Detecting a header refusal reliably would need a server-side header
+    //   probe, which is a proxy and is out of scope by design.
+    //
+    // State table (state -> trigger -> UI inside the ad area):
+    //   loading           mount or retry          spinner + "جارٍ تحميل الإعلان…"
+    //   loaded            load before 6000ms      ad iframe interactive
+    //   blocked           6000ms timeout / error  spinner + "جارٍ تحميل إعلان بديل…"
+    //   socialbar-active  Social Bar injected     Social Bar interactive
+    //   socialbar-failed  8000ms empty / onerror  one silent retry, then refused
+    //   refused           Social Bar failed twice "Refused to connect" + retry
+    //
+    // How to test:
+    // 1. Open a watch page and press play; the ad slot covers the player.
+    // 2. DevTools > Network: first request is the asiafilm.org Direct Link.
+    // 3. If it refuses embedding, a bancadeltempoidea.org request appears and
+    //    the Social Bar renders in the same slot.
+    // 4. DevTools > Console shows the browser X-Frame-Options / CSP warning
+    //    (page JS cannot read those headers).
+    // 5. "Refused to connect" appears only when the Social Bar fails too.
+    // 6. Confirm that no new tab or window opens at any point.
+    // =====================================================================
+    const AD_SLOT_CONFIG = {
+      directLink:'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28',
+      socialBarSrc:'https://bancadeltempoidea.org/14/8a3f583cff4b21baa241982099a374f0',
+      // Clean alternative: host the same snippet as a static file on the
+      // platform origin (for example '/ad-socialbar.html') and put that path
+      // here. Empty means the snippet is injected with srcdoc.
+      socialBarPage:'',
+      sandbox:'allow-scripts allow-same-origin allow-forms',
+      directTimeoutMs:6000,
+      socialBarTimeoutMs:8000
+    };
+
+    function socialBarDocument() {
+      // The snippet is injected exactly as Adsterra issued it: no rewriting and
+      // no proxy. onerror only reports failure to the parent slot; it does not
+      // change the ad script or its tracking.
+      return '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+        '<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent}</style>' +
+        '</head><body>' +
+        '<script data-cfasync="false" src="' + AD_SLOT_CONFIG.socialBarSrc + '" ' +
+        'onerror="window.parent.postMessage({type:\'socialbar-failed\'},\'*\')"></script>' +
+        '</body></html>';
+    }
+
+    function createAdSlot(container) {
+      let frame = null;
+      let loader = null;
+      let refusedPanel = null;
+      let generation = 0;
+      let state = '';
+      let autoRetried = false;
+      let mounted = false;
+      const timers = {direct:null,watchdog:null};
+
+      function clearTimer(name) {
+        if (timers[name] == null) return;
+        try { clearTimeout(timers[name]); } catch (_) {}
+        timers[name] = null;
+      }
+
+      function clearTimers() {
+        clearTimer('direct');
+        clearTimer('watchdog');
+      }
+
+      function setState(next) {
+        state = next;
+        container.setAttribute('data-ad-state', next);
+        if (loader) {
+          loader.textContent = next === 'blocked'
+            ? 'جارٍ تحميل إعلان بديل…'
+            : 'جارٍ تحميل الإعلان…';
+        }
+      }
+
+      function mount() {
+        if (mounted) return;
+        mounted = true;
+
+        // State 1: loading. Announced through aria-live, never a new window.
+        loader = document.createElement('div');
+        loader.className = 'akwam-ad-loader';
+        loader.setAttribute('role','status');
+        loader.setAttribute('aria-live','polite');
+        loader.setAttribute('aria-atomic','true');
+        loader.textContent = 'جارٍ تحميل الإعلان…';
+        container.appendChild(loader);
+
+        // State 6: refused. Last resort, inside the ad area only.
+        refusedPanel = document.createElement('div');
+        refusedPanel.className = 'akwam-ad-refused';
+        refusedPanel.setAttribute('role','alert');
+        const refusedText = document.createElement('p');
+        refusedText.className = 'akwam-ad-refused-text';
+        refusedText.textContent = 'Refused to connect — هذا الإعلان لا يسمح بالتضمين.';
+        const retry = document.createElement('button');
+        retry.className = 'akwam-ad-retry';
+        retry.setAttribute('type','button');
+        retry.textContent = 'إعادة المحاولة';
+        retry.addEventListener('click', () => start({manual:true}));
+        refusedPanel.appendChild(refusedText);
+        refusedPanel.appendChild(retry);
+        container.appendChild(refusedPanel);
+      }
+
+      function replaceFrame() {
+        if (frame) {
+          try { frame.src = 'about:blank'; } catch (_) {}
+          if (frame.parentElement) frame.remove();
+        }
+        frame = document.createElement('iframe');
+        frame.className = 'akwam-ad-frame';
+        frame.setAttribute('title','إعلان ممول');
+        frame.setAttribute('loading','eager');
+        frame.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
+        frame.setAttribute('sandbox', AD_SLOT_CONFIG.sandbox);
+        container.appendChild(frame);
+      }
+
+      function watchDirectFrame(attempt) {
+        const current = frame;
+        current.addEventListener('load', () => {
+          if (attempt !== generation || state !== 'loading') return;
+          // State 2: loaded. Interaction is enabled by the sandbox.
+          clearTimer('direct');
+          setState('loaded');
+        });
+        current.addEventListener('error', () => {
+          if (attempt !== generation || state !== 'loading') return;
+          onBlocked();
+        });
+      }
+
+      // State 3: blocked. Embedding refused or timed out; do not show
+      // "Refused to connect" yet, go straight to the Social Bar.
+      function onBlocked() {
+        clearTimer('direct');
+        setState('blocked');
+        startSocialBar();
+      }
+
+      function socialBarRendered() {
+        if (!frame) return false;
+        let doc = null;
+        try { doc = frame.contentWindow && frame.contentWindow.document; } catch (_) { doc = null; }
+        if (!doc || !doc.body) return false;
+        // The injected <script> node alone proves nothing: it can be present
+        // while the request failed. Any other node means Social Bar painted.
+        for (const child of doc.body.children) {
+          if (String(child.tagName || '').toUpperCase() !== 'SCRIPT') return true;
+        }
+        return false;
+      }
+
+      // State 4: socialbar-active. Same slot, same sandbox, same Adsterra
+      // origin, so cookies and tracking keep working.
+      function startSocialBar() {
+        generation += 1;
+        const attempt = generation;
+        clearTimers();
+        replaceFrame();
+        frame.setAttribute('data-ad-source','socialbar');
+        if (AD_SLOT_CONFIG.socialBarPage) frame.src = AD_SLOT_CONFIG.socialBarPage;
+        else frame.srcdoc = socialBarDocument();
+        setState('socialbar-active');
+        // State 5 watchdog: no Social Bar nodes after 8000ms means failure.
+        // The try/catch above is needed because the frame is same-origin only
+        // through srcdoc + allow-same-origin.
+        timers.watchdog = setTimeout(() => {
+          if (attempt !== generation) return;
+          if (socialBarRendered()) return;
+          socialBarFailed();
+        }, AD_SLOT_CONFIG.socialBarTimeoutMs);
+      }
+
+      function socialBarFailed() {
+        if (state !== 'socialbar-active') return;
+        clearTimers();
+        setState('socialbar-failed');
+        if (!autoRetried) {
+          // One automatic retry of the whole chain, then manual only.
+          autoRetried = true;
+          start();
+          return;
+        }
+        showRefused();
+      }
+
+      function showRefused() {
+        generation += 1;
+        clearTimers();
+        setState('refused');
+      }
+
+      function onMessage(event) {
+        const data = event && event.data;
+        if (!data || data.type !== 'socialbar-failed') return;
+        if (frame && event.source && event.source !== frame.contentWindow) return;
+        if (state !== 'socialbar-active' && state !== 'blocked') return;
+        socialBarFailed();
+      }
+      window.addEventListener('message', onMessage);
+
+      function start(options) {
+        generation += 1;
+        const attempt = generation;
+        clearTimers();
+        if (options && options.manual) autoRetried = false;
+        mount();
+        setState('loading');
+        replaceFrame();
+        frame.setAttribute('data-ad-source','direct-link');
+        watchDirectFrame(attempt);
+        // Direct Link is the iframe src exactly as Adsterra issued it: no
+        // preload, no prefetch, no duplicate request, no platform redirect.
+        frame.src = AD_SLOT_CONFIG.directLink;
+        timers.direct = setTimeout(() => {
+          if (attempt !== generation || state !== 'loading') return;
+          onBlocked();
+        }, AD_SLOT_CONFIG.directTimeoutMs);
+      }
+
+      function stop() {
+        generation += 1;
+        clearTimers();
+        if (frame) {
+          try { frame.src = 'about:blank'; } catch (_) {}
+          try { frame.srcdoc = ''; } catch (_) {}
+          if (frame.parentElement) frame.remove();
+          frame = null;
+        }
+        if (loader && loader.parentElement) loader.remove();
+        if (refusedPanel && refusedPanel.parentElement) refusedPanel.remove();
+        loader = null;
+        refusedPanel = null;
+        mounted = false;
+        autoRetried = false;
+        state = '';
+      }
+
+      return {start,stop,getState:() => state};
+    }
+
     function installAdBreak(video) {
       const player = video.closest('.plyr');
       if (!player || adBreakVideos.has(video)) return;
@@ -574,14 +868,7 @@ const bootstrapScript = String.raw`(() => {
 
       const adFrameShell = document.createElement('div');
       adFrameShell.className = 'akwam-ad-frame-shell';
-      const adFrame = document.createElement('iframe');
-      adFrame.className = 'akwam-ad-frame';
-      adFrame.setAttribute('title','إعلان ممول');
-      adFrame.setAttribute('loading','eager');
-      adFrame.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
-      adFrame.setAttribute('sandbox','allow-scripts allow-forms');
-      adFrame.src = 'about:blank';
-      adFrameShell.appendChild(adFrame);
+      const adSlot = createAdSlot(adFrameShell);
 
       const countdownLabel = document.createElement('div');
       countdownLabel.className = 'akwam-ad-countdown';
@@ -630,7 +917,7 @@ const bootstrapScript = String.raw`(() => {
       }
 
       function closeAdBreak() {
-        adFrame.src = 'about:blank';
+        adSlot.stop();
         overlay.remove();
         adActive = false;
         if (openingAdPendingPlayback) {
@@ -662,7 +949,7 @@ const bootstrapScript = String.raw`(() => {
           player.appendChild(overlay);
         }
         syncPlacement();
-        adFrame.src = adBridgeUrl;
+        adSlot.start();
         restartTicker();
       }
 
@@ -1697,7 +1984,6 @@ const translatorScript = String.raw`(() => {
 
 
 const DEFAULT_UPSTREAM = 'akwam.ss';
-const AD_LINK_URL = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
 const ALLOWED_LANGUAGES = new Set(['ar','en','tr','fr','de','es','it','pt','ru','fa','ur','hi','id','ja','ko','zh-CN']);
 const SEO_CATEGORIES = new Map([
   ['30',{slug:'foreign',title:'مسلسلات عالمية مترجمة | Turkify Series',heading:'مسلسلات عالمية',description:'تصفح تصنيف المسلسلات العالمية المترجمة، واكتشف العناوين والتقييمات وتفاصيل الحلقات على Turkify Series.'}],
@@ -1722,159 +2008,12 @@ const worker = {
     if (url.pathname === '/api/translate') return handleTranslate(request, env);
     if (url.pathname === '/__bridge/bootstrap.js') return javascript(bootstrapScript);
     if (url.pathname === '/__bridge/translator.js') return javascript(translatorScript);
-    if (url.pathname === '/__bridge/ad') return handleAdBridge(request, env);
     if (url.pathname === '/site' || url.pathname.startsWith('/site/')) return proxyAkwam(request, env, url);
     return json({error:'Not found'}, 404);
   }
 };
 
 
-
-const AD_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-const AD_TIMEOUT_MS = 9000;
-const AD_MAX_HTML_BYTES = 2000000;
-
-function adFrameHeaders(env) {
-  const parentOrigins = [...allowedParents(env)].join(' ');
-  return new Headers({
-    'Content-Type':'text/html; charset=utf-8',
-    'Cache-Control':'no-store',
-    'Referrer-Policy':'strict-origin-when-cross-origin',
-    'X-Content-Type-Options':'nosniff',
-    'Content-Security-Policy':"frame-ancestors 'self'" + (parentOrigins ? ' ' + parentOrigins : '')
-  });
-}
-
-function adFallbackRedirect() {
-  return new Response(null, {
-    status:302,
-    headers:{
-      'Location':AD_LINK_URL,
-      'Cache-Control':'no-store',
-      'Referrer-Policy':'strict-origin-when-cross-origin',
-      'X-Content-Type-Options':'nosniff'
-    }
-  });
-}
-
-function escapeHtmlAttribute(value) {
-  return String(value).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function rewriteAdHtml(html, finalUrl) {
-  let out = String(html);
-  out = out.replace(/<base\b[^>]*>/gi, '');
-  out = out.replace(/<meta\b[^>]*http-equiv\s*=\s*["']?\s*content-security-policy[^>]*>/gi, '');
-  out = out.replace(/<meta\b[^>]*http-equiv\s*=\s*["']?\s*refresh[^>]*>/gi, '');
-  out = out.replace(/\starget\s*=\s*(["'])_blank\1/gi, '');
-  out = out.replace(/\sintegrity\s*=\s*("[^"]*"|'[^']*')/gi, '');
-  const base = '<base href="' + escapeHtmlAttribute(finalUrl) + '">';
-  if (/<head\b[^>]*>/i.test(out)) out = out.replace(/<head\b[^>]*>/i, match => match + base);
-  else out = base + out;
-  return out;
-}
-
-async function resolveAdOffer() {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), AD_TIMEOUT_MS);
-  try {
-    const adResponse = await fetch(AD_LINK_URL, {
-      redirect:'follow',
-      signal:controller.signal,
-      headers:{
-        'User-Agent':AD_UA,
-        'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language':'en-US,en;q=0.9'
-      }
-    });
-    if (!adResponse.ok) return null;
-    const adHtml = await adResponse.text();
-    const match = adHtml.match(/w=\(a='([^']+)'/s);
-    if (!match) return null;
-    let config;
-    try { config = JSON.parse(decodeURIComponent(match[1])); }
-    catch (_) { return null; }
-    const action = config?.form?.action;
-    const values = config?.form?.values;
-    if (typeof action !== 'string' || !action.startsWith('/4/') || !values || typeof values !== 'object') return null;
-    const cookies = (typeof adResponse.headers.getSetCookie === 'function' ? adResponse.headers.getSetCookie() : [])
-      .map(value => String(value).split(';')[0]).join('; ');
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(values)) {
-      if (typeof value === 'string') params.set(key, value);
-    }
-    params.set('fr', '1');
-    params.set('pii', 'true');
-    for (const [key, value] of [['sw2','1280'],['sh2','720'],['sw3','1280'],['sh3','720'],['sw4','1280'],['sh4','720']]) {
-      if (!params.has(key)) params.set(key, value);
-    }
-    const clickUrl = new URL(action, 'https://asiafilm.org');
-    clickUrl.search = params.toString();
-    const clickResponse = await fetch(clickUrl.href, {
-      redirect:'follow',
-      signal:controller.signal,
-      headers:{
-        'User-Agent':AD_UA,
-        'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language':'en-US,en;q=0.9',
-        'Referer':AD_LINK_URL,
-        'Cookie':cookies
-      }
-    });
-    if (!clickResponse.ok) return null;
-    const contentType = clickResponse.headers.get('content-type') || '';
-    if (!contentType.includes('text/html')) return null;
-    const html = await clickResponse.text();
-    if (!html || html.length > AD_MAX_HTML_BYTES) return null;
-    if (/id=["']submit-form["']/i.test(html) || /w=\(a='/i.test(html)) return null;
-    return {html, finalUrl:clickResponse.url || clickUrl.href};
-  } catch (_) {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function adNeedsSnapshot(html) {
-  if (/is_bot\s*:\s*['"]1['"]/i.test(html)) return true;
-  if (/id=["']funnel-ai["']/i.test(html)) return true;
-  if (/<(?:div|main)[^>]+id=["'](?:root|app)["'][^>]*>\s*<\/(?:div|main)>/i.test(html)) return true;
-  return false;
-}
-
-function renderAdSnapshot(finalUrl) {
-  let target;
-  try { target = new URL(finalUrl); }
-  catch (_) { return null; }
-  if (target.protocol !== 'http:' && target.protocol !== 'https:') return null;
-  const snapshot = 'https://image.thum.io/get/width/1280/crop/800/noanimate/' + encodeURI(target.href);
-  return `<!doctype html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>إعلان</title>
-  <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f4f6f8}img{display:block;width:100%;height:100%;object-fit:cover;object-position:top center}</style>
-</head>
-<body><img src="${escapeHtmlAttribute(snapshot)}" alt="إعلان" referrerpolicy="no-referrer"></body>
-</html>`;
-}
-
-async function handleAdBridge(request, env) {
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return new Response('Method not allowed', {status:405, headers:{Allow:'GET, HEAD','Cache-Control':'no-store'}});
-  }
-  const headers = adFrameHeaders(env);
-  if (request.method === 'HEAD') return new Response(null, {status:200, headers});
-  const offer = await resolveAdOffer();
-  if (!offer) return adFallbackRedirect();
-  if (adNeedsSnapshot(offer.html)) {
-    const snapshot = renderAdSnapshot(offer.finalUrl);
-    if (snapshot) return new Response(snapshot, {status:200, headers});
-  }
-  const body = rewriteAdHtml(offer.html, offer.finalUrl);
-  return new Response(body, {status:200, headers});
-}
 
 function allowedParents(env) {
   return new Set(String(env.ALLOWED_PARENT_ORIGINS || '').split(',').map(value => {
@@ -2117,7 +2256,7 @@ async function proxyAkwam(request, env, url) {
   if (contentType.includes('text/html')) {
     outHeaders.set('Content-Security-Policy', "frame-ancestors 'self'" + (parentOrigin ? ' ' + parentOrigin : ''));
     const bridgeParent = seoMode ? '' : parentOrigin;
-    const inlineConfig = '<script>window.__AKWAM_BRIDGE__=' + JSON.stringify({lang,parentOrigin:bridgeParent,upstreamHost,seoMode,adBridgeUrl:workerOrigin + '/__bridge/ad'}) + ';</script>' +
+    const inlineConfig = '<script>window.__AKWAM_BRIDGE__=' + JSON.stringify({lang,parentOrigin:bridgeParent,upstreamHost,seoMode}) + ';</script>' +
       '<script src="' + workerOrigin + '/__bridge/bootstrap.js"></script>';
     const rewriter = new HTMLRewriter()
       .on('script[src]', {element(element) {

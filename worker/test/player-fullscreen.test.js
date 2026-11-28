@@ -300,7 +300,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
     Date:class extends Date { static now() { return clock.now; } },
     setInterval(callback,delay) { const timer = {callback,delay}; intervals.push(timer); return timer; },
     setTimeout(callback,delay) { const timer = {callback,delay}; timers.push(timer); return timer; },
-    clearTimeout() {}
+    clearTimeout(timer) { if (timer) timer.cleared = true; }
   };
   if (orientation) context.screen = {orientation};
 
@@ -567,16 +567,16 @@ test('fullscreen ad pauses at the exact position and resumes after forty-five se
   const overlay = getAdBreak(page);
   assert.ok(overlay);
   const [frameShell,countdown] = overlay.children;
-  const [adFrame] = frameShell.children;
+  const adFrame = frameShell.children.find(child => child.className === 'akwam-ad-frame');
   assert.equal(overlay.children.length, 2);
+  assert.ok(adFrame);
   assert.equal(adFrame.tagName, 'iframe');
-  assert.equal(adFrame.className, 'akwam-ad-frame');
-  assert.equal(adFrame.src, 'https://worker.example/__bridge/ad');
+  assert.equal(adFrame.src, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
   assert.equal(adFrame.attributes.title, 'إعلان ممول');
   assert.equal(adFrame.attributes.loading, 'eager');
-  assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-forms');
+  assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-same-origin allow-forms');
   assert.equal(frameShell.className, 'akwam-ad-frame-shell');
-  assert.equal(frameShell.children.length, 1);
+  assert.equal(frameShell.attributes['data-ad-state'], 'loading');
   assert.match(countdown.textContent, /45 ثوانٍ$/);
   assert.equal(page.video.paused, true);
   assert.equal(page.video.pauseCalls, 1);
@@ -586,7 +586,7 @@ test('fullscreen ad pauses at the exact position and resumes after forty-five se
   assert.equal(overlay.className, 'akwam-ad-break akwam-ad-break-immersive');
   const playerStyles = page.mobileSearchStyles.map(style => style.textContent).join('\n');
   assert.match(playerStyles, /\.akwam-ad-break-immersive\{position:fixed!important;inset:0!important;z-index:2147483647!important\}/);
-  assert.match(playerStyles, /\.akwam-ad-frame-shell\{position:absolute!important;inset:10px!important;overflow:hidden!important;border:0!important;border-radius:0!important;background:transparent!important;/);
+  assert.match(playerStyles, /\.akwam-ad-frame-shell\{position:absolute!important;inset:10px!important;overflow:hidden!important;border:0!important;border-radius:0!important;background:#07090f!important;/);
   assert.match(playerStyles, /\.akwam-ad-frame-shell\{inset:8px!important;/);
   assert.doesNotMatch(playerStyles, /akwam-ad-(?:fallback|hint|visit)/);
 
@@ -600,6 +600,100 @@ test('fullscreen ad pauses at the exact position and resumes after forty-five se
   assert.equal(page.video.currentTime, 600.375);
   assert.equal(page.video.paused, false);
   assert.equal(page.video.playCalls, 2);
+});
+
+function getAdShell(page) {
+  const overlay = getAdBreak(page);
+  return overlay ? overlay.children[0] : null;
+}
+
+function getAdFrame(page) {
+  const shell = getAdShell(page);
+  return shell ? shell.children.find(child => child.className === 'akwam-ad-frame') : null;
+}
+
+function fireAdTimer(page, delay) {
+  const timer = page.timers.find(item => item.delay === delay && !item.fired && !item.cleared);
+  assert.ok(timer, 'expected a pending ' + delay + 'ms ad timer');
+  timer.fired = true;
+  timer.callback();
+}
+
+test('the ad slot shows the direct Adsterra frame when it loads in time', () => {
+  const page = runWatchPage(1);
+  clickCenterPlay(page);
+  const shell = getAdShell(page);
+  const frame = getAdFrame(page);
+  assert.equal(shell.attributes['data-ad-state'], 'loading');
+  assert.equal(frame.src, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
+  assert.equal(frame.attributes['data-ad-source'], 'direct-link');
+  assert.equal(frame.attributes.sandbox, 'allow-scripts allow-same-origin allow-forms');
+
+  frame.dispatch('load');
+  assert.equal(shell.attributes['data-ad-state'], 'loaded');
+  assert.equal(page.timers.some(item => item.delay === 6000 && !item.fired && !item.cleared), false);
+  assert.equal(shell.attributes['data-ad-state'], 'loaded');
+  assert.equal(getAdFrame(page), frame);
+});
+
+test('a refused direct link is replaced by the Social Bar in the same slot', () => {
+  const page = runWatchPage(1);
+  clickCenterPlay(page);
+  const shell = getAdShell(page);
+
+  fireAdTimer(page, 6000);
+  assert.equal(shell.attributes['data-ad-state'], 'socialbar-active');
+  const frame = getAdFrame(page);
+  assert.equal(frame.attributes['data-ad-source'], 'socialbar');
+  assert.equal(frame.attributes.sandbox, 'allow-scripts allow-same-origin allow-forms');
+  assert.match(frame.srcdoc, /bancadeltempoidea\.org\/14\/8a3f583cff4b21baa241982099a374f0/);
+  assert.match(frame.srcdoc, /type:'socialbar-failed'/);
+
+  frame.contentWindow = {document:{body:{children:[{nodeType:1}]}}};
+  fireAdTimer(page, 8000);
+  assert.equal(shell.attributes['data-ad-state'], 'socialbar-active');
+});
+
+test('the slot retries once and then shows Refused to connect inside the ad area', () => {
+  const page = runWatchPage(1);
+  clickCenterPlay(page);
+
+  fireAdTimer(page, 6000);
+  fireAdTimer(page, 8000);
+  let shell = getAdShell(page);
+  assert.equal(shell.attributes['data-ad-state'], 'loading');
+
+  fireAdTimer(page, 6000);
+  fireAdTimer(page, 8000);
+  shell = getAdShell(page);
+  assert.equal(shell.attributes['data-ad-state'], 'refused');
+  const panel = shell.children.find(child => child.className === 'akwam-ad-refused');
+  assert.ok(panel);
+  assert.equal(panel.attributes.role, 'alert');
+  assert.match(panel.children[0].textContent, /Refused to connect/);
+  const retry = panel.children.find(child => child.className === 'akwam-ad-retry');
+  assert.ok(retry);
+
+  retry.dispatch('click');
+  assert.equal(shell.attributes['data-ad-state'], 'loading');
+  assert.equal(page.window.openCalls.length, 0);
+  assert.equal(getAdBreak(page).children.length, 2);
+});
+
+test('a socialbar-failed message from the ad frame moves the slot to refused', () => {
+  const page = runWatchPage(1);
+  clickCenterPlay(page);
+  fireAdTimer(page, 6000);
+  const frame = getAdFrame(page);
+  frame.contentWindow = {document:{body:{children:[{nodeType:1}]}}};
+
+  for (const listener of page.windowListeners.get('message') || []) {
+    listener({data:{type:'socialbar-failed'},source:frame.contentWindow});
+  }
+  assert.equal(getAdShell(page).attributes['data-ad-state'], 'loading');
+  fireAdTimer(page, 6000);
+  fireAdTimer(page, 8000);
+  assert.equal(getAdShell(page).attributes['data-ad-state'], 'refused');
 });
 
 test('native fullscreen ad stays inside the fullscreen player above the video', () => {
