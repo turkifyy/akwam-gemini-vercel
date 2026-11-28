@@ -27,6 +27,13 @@ function makeElement(tagName) {
     },
     dispatch(name,event={}) { for (const callback of listeners.get(name) || []) callback(event); },
     appendChild(child) { this.children.push(child); child.parentElement = this; return child; },
+    insertBefore(child,reference) {
+      const index = this.children.indexOf(reference);
+      if (index < 0) return this.appendChild(child);
+      this.children.splice(index,0,child);
+      child.parentElement = this;
+      return child;
+    },
     append(...children) { for (const child of children) this.appendChild(child); },
     remove() {
       const index = this.parentElement?.children?.indexOf(this) ?? -1;
@@ -227,6 +234,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
     head:{appendChild(element) { mobileSearchStyles.push(element); }},
     createElement(tagName) {
       const element = makeElement(tagName);
+      if (tagName === 'iframe') element.contentWindow = {};
       Object.defineProperty(element,'src',{
         get() { return this._src || ''; },
         set(value) {
@@ -300,7 +308,7 @@ function runWatchPage(episode, sessionStorage = createStorage(), options = {}) {
     Date:class extends Date { static now() { return clock.now; } },
     setInterval(callback,delay) { const timer = {callback,delay}; intervals.push(timer); return timer; },
     setTimeout(callback,delay) { const timer = {callback,delay}; timers.push(timer); return timer; },
-    clearTimeout() {}
+     clearTimeout(timer) { if (timer) timer.cleared = true; }
   };
   if (orientation) context.screen = {orientation};
 
@@ -571,12 +579,17 @@ test('fullscreen ad pauses at the exact position and resumes after forty-five se
   assert.equal(overlay.children.length, 2);
   assert.equal(adFrame.tagName, 'iframe');
   assert.equal(adFrame.className, 'akwam-ad-frame');
-  assert.equal(adFrame.src, 'https://worker.example/__bridge/ad');
+  assert.equal(adFrame.src, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
   assert.equal(adFrame.attributes.title, 'إعلان ممول');
   assert.equal(adFrame.attributes.loading, 'eager');
-  assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-forms');
+  assert.equal(adFrame.attributes.sandbox, 'allow-scripts allow-same-origin allow-forms');
   assert.equal(frameShell.className, 'akwam-ad-frame-shell');
-  assert.equal(frameShell.children.length, 1);
+  assert.equal(frameShell.children.length, 2);
+  const adState = frameShell.children.find(element => element.className === 'akwam-ad-state');
+  assert.equal(adState.attributes.role, 'status');
+  assert.equal(adState.attributes['aria-live'], 'polite');
+  assert.equal(adState.hidden, false);
+  assert.equal(adState.attributes['data-state'], 'loading');
   assert.match(countdown.textContent, /45 ثوانٍ$/);
   assert.equal(page.video.paused, true);
   assert.equal(page.video.pauseCalls, 1);
@@ -584,11 +597,14 @@ test('fullscreen ad pauses at the exact position and resumes after forty-five se
   assert.equal(page.body.children.includes(overlay), true);
   assert.equal(page.player.children.includes(overlay), false);
   assert.equal(overlay.className, 'akwam-ad-break akwam-ad-break-immersive');
+  adFrame.dispatch('load');
+  assert.equal(adState.attributes['data-state'], 'loaded');
+  assert.equal(adState.hidden, true);
   const playerStyles = page.mobileSearchStyles.map(style => style.textContent).join('\n');
   assert.match(playerStyles, /\.akwam-ad-break-immersive\{position:fixed!important;inset:0!important;z-index:2147483647!important\}/);
   assert.match(playerStyles, /\.akwam-ad-frame-shell\{position:absolute!important;inset:10px!important;overflow:hidden!important;border:0!important;border-radius:0!important;background:transparent!important;/);
   assert.match(playerStyles, /\.akwam-ad-frame-shell\{inset:8px!important;/);
-  assert.doesNotMatch(playerStyles, /akwam-ad-(?:fallback|hint|visit)/);
+  assert.match(playerStyles, /\.akwam-ad-state\[hidden\]\{display:none!important\}/);
 
   for (let second = 0; second < 44; second++) tick();
   assert.ok(page.body.children.includes(overlay));
@@ -600,6 +616,61 @@ test('fullscreen ad pauses at the exact position and resumes after forty-five se
   assert.equal(page.video.currentTime, 600.375);
   assert.equal(page.video.paused, false);
   assert.equal(page.video.playCalls, 2);
+});
+
+test('ad fallback stays isolated and refused state allows one retry', () => {
+  const page = runWatchPage(1);
+  clickCenterPlay(page);
+  const tick = page.intervals.find(timer => timer.delay === 1000).callback;
+  for (let second = 0; second < 15; second++) tick();
+  page.video.currentTime = 599;
+  page.video.seeking = true;
+  dispatchVideoEvent(page,'seeking');
+  page.video.seeking = false;
+  dispatchVideoEvent(page,'seeked');
+  page.video.currentTime = 600;
+  dispatchVideoEvent(page,'timeupdate');
+
+  const overlay = getAdBreak(page);
+  const frameShell = overlay.children[0];
+  const state = frameShell.children.find(element => element.className === 'akwam-ad-state');
+  const directFrame = frameShell.children.find(element => element.tagName === 'iframe');
+  directFrame.dispatch('error');
+
+  let fallbackFrame = frameShell.children.find(element => element.tagName === 'iframe');
+  assert.equal(fallbackFrame.attributes.sandbox, 'allow-scripts allow-forms');
+  assert.match(fallbackFrame.srcdoc, /bancadeltempoidea\.org\/14\/8a3f583cff4b21baa241982099a374f0/);
+  assert.match(fallbackFrame.srcdoc, /socialbar-loaded/);
+  assert.equal(state.attributes['data-state'], 'socialbar-active');
+  assert.equal(state.hidden, false);
+
+  page.windowListeners.get('message').at(-1)({
+    source:fallbackFrame.contentWindow,
+    data:{type:'socialbar-loaded'}
+  });
+  assert.equal(state.attributes['data-state'], 'socialbar-active');
+  assert.equal(state.hidden, true);
+
+  page.windowListeners.get('message').at(-1)({
+    source:fallbackFrame.contentWindow,
+    data:{type:'socialbar-failed'}
+  });
+  assert.equal(state.attributes['data-state'], 'refused');
+  assert.match(state.children[1].textContent, /Refused to connect/);
+  const retryButton = state.children.find(element => element.className === 'akwam-ad-retry');
+  assert.equal(retryButton.hidden, false);
+  retryButton.dispatch('click');
+
+  const retriedDirectFrame = frameShell.children.find(element => element.tagName === 'iframe');
+  assert.equal(retriedDirectFrame.src, 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
+  retriedDirectFrame.dispatch('error');
+  fallbackFrame = frameShell.children.find(element => element.tagName === 'iframe');
+  page.windowListeners.get('message').at(-1)({
+    source:fallbackFrame.contentWindow,
+    data:{type:'socialbar-failed'}
+  });
+  assert.equal(state.attributes['data-state'], 'refused');
+  assert.equal(retryButton.hidden, true);
 });
 
 test('native fullscreen ad stays inside the fullscreen player above the video', () => {
@@ -1180,7 +1251,7 @@ test('exit still completes when the orientation lock is refused', async () => {
   assert.equal(page.orientation.lockCalls.includes('portrait'), true);
   assert.equal(page.document.fullscreenElement, page.player);
 
-  for (const timer of page.timers) timer.callback();
+  for (const timer of page.timers) if (!timer.cleared) timer.callback();
   assert.equal(page.document.fullscreenElement, null);
 });
 
