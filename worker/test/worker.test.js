@@ -337,102 +337,21 @@ test('injected scripts bypass stale browser caches', async () => {
   }
 });
 
-test('video ad bridge resolves and renders the advertiser page inside the frame', async () => {
-  const originalFetch = globalThis.fetch;
-  const adLink = 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28';
-  const adConfig = {form:{action:'/4/397db7f27bcb1e058e7ac9ba2a034a28',values:{fstu:'abc',t:'123'},e:false}};
-  const adHtml = '<!doctype html><html><body><form id="submit-form"></form><script>w=(a=\'' + encodeURIComponent(JSON.stringify(adConfig)) + '\',JSON.parse(decodeURIComponent(a)));</script></body></html>';
-  const offerHtml = '<!doctype html><html><head><title>Advertiser</title><meta http-equiv="Content-Security-Policy" content="frame-ancestors \'none\'"></head><body><h1>Compare offers</h1><a href="/next" target="_blank">Next</a><img src="/hero.png" integrity="sha256-x"></body></html>';
-  const calls = [];
-  globalThis.fetch = async (url, init = {}) => {
-    calls.push({url:String(url), init});
-    if (calls.length === 1) {
-      return new Response(adHtml, {status:200, headers:{'Content-Type':'text/html','Set-Cookie':'__cf_bm=abc; Path=/'}});
-    }
-    const offer = new Response(offerHtml, {status:200, headers:{'Content-Type':'text/html; charset=utf-8','X-Frame-Options':'DENY','Content-Security-Policy':"frame-ancestors 'none'"}});
-    Object.defineProperty(offer, 'url', {value:'https://advertiser.example/offer?a=1&b=2'});
-    return offer;
-  };
-  try {
-    const response = await worker.fetch(new Request(workerUrl + '/__bridge/ad'), {ALLOWED_PARENT_ORIGINS:'https://turkifyseries.vercel.app'});
-    assert.equal(response.status, 200);
-    assert.match(response.headers.get('Content-Type'), /text\/html/);
-    assert.equal(response.headers.get('X-Frame-Options'), null);
-    assert.match(response.headers.get('Content-Security-Policy'), /^frame-ancestors 'self' https:\/\/turkifyseries\.vercel\.app$/);
-    const html = await response.text();
-    assert.match(html, /<base href="https:\/\/advertiser\.example\/offer\?a=1&amp;b=2">/);
-    assert.match(html, /Compare offers/);
-    assert.doesNotMatch(html, /target="_blank"/);
-    assert.doesNotMatch(html, /integrity=/);
-    assert.doesNotMatch(html, /http-equiv="Content-Security-Policy"/i);
-    assert.equal(calls.length, 2);
-    assert.equal(calls[0].url, adLink);
-    assert.match(calls[1].url, /^https:\/\/asiafilm\.org\/4\/397db7f27bcb1e058e7ac9ba2a034a28\?/);
-    assert.match(calls[1].url, /[?&]fr=1/);
-    assert.match(calls[1].url, /[?&]pii=true/);
-    assert.equal(calls[1].init.headers.Cookie, '__cf_bm=abc');
-
-    const head = await worker.fetch(new Request(workerUrl + '/__bridge/ad', {method:'HEAD'}), {});
-    assert.equal(head.status, 200);
-    assert.equal(await head.text(), '');
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-
-  const rejected = await worker.fetch(new Request(workerUrl + '/__bridge/ad', {method:'POST'}), {});
-  assert.equal(rejected.status, 405);
-  assert.equal(rejected.headers.get('Allow'), 'GET, HEAD');
-});
-
-test('ad bridge uses a rendered snapshot for bot-protected landing pages', async () => {
-  const originalFetch = globalThis.fetch;
-  const adConfig = {form:{action:'/4/397db7f27bcb1e058e7ac9ba2a034a28',values:{fstu:'abc',t:'123'},e:false}};
-  const adHtml = '<!doctype html><html><body><form id="submit-form"></form><script>w=(a=\'' + encodeURIComponent(JSON.stringify(adConfig)) + '\',JSON.parse(decodeURIComponent(a)));</script></body></html>';
-  const shellHtml = '<!doctype html><html><body><script>window.datadome={is_bot: \'1\', traffic_rule_response: \'block\'};</script><div class="content"><div id="funnel-ai"></div></div></body></html>';
-  globalThis.fetch = async () => {
-    if (!globalThis.fetch.called) {
-      globalThis.fetch.called = true;
-      return new Response(adHtml, {status:200, headers:{'Content-Type':'text/html'}});
-    }
-    const offer = new Response(shellHtml, {status:200, headers:{'Content-Type':'text/html; charset=utf-8','X-Frame-Options':'DENY'}});
-    Object.defineProperty(offer, 'url', {value:'https://advertiser.example/offer?a=1&b=2'});
-    return offer;
-  };
-  try {
-    const response = await worker.fetch(new Request(workerUrl + '/__bridge/ad'), {});
-    assert.equal(response.status, 200);
-    const html = await response.text();
-    assert.match(html, /image\.thum\.io\/get\/width\/1280\/crop\/800\/noanimate\/https:\/\/advertiser\.example\/offer\?a=1&amp;b=2/);
-    assert.match(html, /<img src=/);
-    assert.doesNotMatch(html, /funnel-ai/);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test('ad bridge falls back to the advertiser URL when resolution is blocked', async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => { throw new Error('blocked'); };
-  try {
-    const response = await worker.fetch(new Request(workerUrl + '/__bridge/ad?url=https://attacker.example'), {});
-    assert.equal(response.status, 302);
-    assert.equal(response.headers.get('Location'), 'https://asiafilm.org/4/397db7f27bcb1e058e7ac9ba2a034a28');
-    assert.equal(response.headers.get('Cache-Control'), 'no-store');
-    assert.equal(await response.text(), '');
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test('the player ad iframe is routed through the Worker bridge without popups', async () => {
+test('the player ad iframe loads the Adsterra links directly and blocks popups', async () => {
   const bootstrap = await readFile(new URL('../src/bootstrap.js', import.meta.url), 'utf8');
   const source = await readFile(new URL('../src/index.js', import.meta.url), 'utf8');
-  assert.match(bootstrap, /adFrame\.src = adBridgeUrl/);
-  assert.match(bootstrap, /adFrame\.setAttribute\('sandbox','allow-scripts allow-forms'\)/);
-  assert.doesNotMatch(bootstrap, /allow-popups/);
-  assert.doesNotMatch(bootstrap, /allow-same-origin/);
-  assert.match(bootstrap, /new URL\('\/__bridge\/ad', location\.origin\)\.href/);
-  assert.match(source, /adBridgeUrl:workerOrigin \+ '\/__bridge\/ad'/);
+  assert.match(bootstrap, /directLink:'https:\/\/asiafilm\.org\/4\/397db7f27bcb1e058e7ac9ba2a034a28'/);
+  assert.match(bootstrap, /socialBarSrc:'https:\/\/bancadeltempoidea\.org\/14\/8a3f583cff4b21baa241982099a374f0'/);
+  const sandbox = bootstrap.match(/sandbox:'([^']+)'/)[1];
+  assert.equal(sandbox, 'allow-scripts allow-same-origin allow-forms');
+  assert.doesNotMatch(bootstrap, /setAttribute\('sandbox',\s*'[^']*allow-popups/);
+  assert.doesNotMatch(bootstrap, /setAttribute\('sandbox',\s*'[^']*allow-top-navigation/);
+  assert.doesNotMatch(bootstrap, /setAttribute\('sandbox',\s*'[^']*allow-modals/);
+  assert.match(bootstrap, /frame\.src = AD_SLOT_CONFIG\.directLink/);
+  assert.doesNotMatch(bootstrap, /__bridge\/ad/);
+  assert.doesNotMatch(source, /__bridge\/ad/);
+  assert.doesNotMatch(source, /thum\.io/);
+  assert.doesNotMatch(source, /AD_LINK_URL/);
 });
 
 test('Korean and foreign archive posters keep labels when titles need no translation', async () => {
